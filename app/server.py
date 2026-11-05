@@ -13,6 +13,8 @@ from pathlib import Path
 import aiohttp
 from aiohttp import web
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # il python 'embedded' non aggiunge la cartella dello script
 import updater
 
 HERE = Path(__file__).resolve().parent

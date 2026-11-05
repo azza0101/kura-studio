@@ -1,0 +1,8 @@
+config.json
+app_version.json
+installer/install_report.json
+__pycache__/
+*.pyc
+*.bak
+*.bak2
+*.part

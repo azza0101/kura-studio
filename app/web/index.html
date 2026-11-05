@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kura Studio</title>
+<style>
+  :root{--bg:#0b0c10;--panel:#14161d;--panel2:#1a1d26;--line:#262a36;--text:#e8eaf0;--mut:#8b91a3;--acc:#7c5cff;--acc2:#4cc9f0;--ok:#34d399;--err:#f87171;--r:14px}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:15px/1.5 Inter,system-ui,"Segoe UI",sans-serif}
+  body{background:radial-gradient(1200px 600px at 80% -10%,#1b1646 0%,transparent 60%),radial-gradient(900px 500px at -10% 110%,#0d2a3a 0%,transparent 55%),var(--bg)}
+  header{display:flex;align-items:center;gap:12px;padding:18px 28px}
+  .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--acc),var(--acc2))}
+  header h1{font-size:17px;font-weight:650;letter-spacing:.2px;margin:0}
+  header .sp{flex:1}
+  .iconbtn{background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:10px;padding:8px 12px;cursor:pointer;font:inherit}
+  .iconbtn:hover{color:var(--text);border-color:#3a3f52}
+  main{max-width:1180px;margin:0 auto;padding:6px 28px 60px;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:22px}
+  @media(max-width:920px){main{grid-template-columns:1fr}}
+  .card{background:linear-gradient(180deg,var(--panel),#11131a);border:1px solid var(--line);border-radius:var(--r);padding:20px}
+  label.l{display:block;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:var(--mut);margin:0 0 8px}
+  textarea,input[type=text],input[type=number],select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);font:inherit;padding:11px 13px;outline:none}
+  textarea:focus,input:focus,select:focus{border-color:var(--acc);box-shadow:0 0 0 3px #7c5cff22}
+  textarea{resize:vertical;min-height:210px;max-height:520px;line-height:1.5}
+  .row{display:grid;gap:14px;margin-top:18px}
+  .row.two{grid-template-columns:1fr 1fr}
+  .seedrow{display:flex;gap:8px}
+  .seedrow button{flex:none}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:0 13px;cursor:pointer;font:inherit}
+  .btn:hover{border-color:#3a3f52}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{padding:7px 12px;border:1px solid var(--line);border-radius:999px;color:var(--mut);cursor:pointer;background:var(--panel2);font-size:13px;user-select:none}
+  .chip.on{color:#fff;background:linear-gradient(135deg,#5b45d6,#3c7fd0);border-color:transparent}
+  input[type=range]{width:100%;accent-color:var(--acc)}
+  .val{float:right;color:var(--text);font-variant-numeric:tabular-nums}
+  .dim{color:var(--mut);font-size:13px;margin-top:6px}
+  .go{width:100%;margin-top:22px;padding:15px;border:0;border-radius:12px;font:inherit;font-weight:650;font-size:16px;color:#fff;cursor:pointer;background:linear-gradient(135deg,#7c5cff,#3da5f5);box-shadow:0 8px 30px #6d4cff44}
+  .go:hover{filter:brightness(1.08)}
+  .go[disabled]{opacity:.55;cursor:default}
+  .stop{background:#2a1a1f;color:#ffb4b4;border:1px solid #5b2a33;box-shadow:none}
+  .stage{display:flex;flex-direction:column;gap:14px}
+  .player{aspect-ratio:9/16;max-height:640px;width:100%;background:#07080b;border:1px solid var(--line);border-radius:var(--r);display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+  .player video{width:100%;height:100%;object-fit:contain;background:#000}
+  .empty{color:var(--mut);text-align:center;padding:30px}
+  .bar{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden}
+  .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .3s}
+  .status{display:flex;justify-content:space-between;color:var(--mut);font-size:13px}
+  .actions{display:flex;gap:10px}
+  .actions a{flex:1;text-align:center;text-decoration:none;color:#fff;background:linear-gradient(135deg,#7c5cff,#3da5f5);padding:12px;border-radius:12px;font-weight:600}
+  .actions a.sec{background:var(--panel2);border:1px solid var(--line);color:var(--text)}
+  .hist{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
+  .hist button{flex:none;width:92px;height:128px;border-radius:10px;border:1px solid var(--line);background:#0a0b10;color:var(--mut);cursor:pointer;font-size:11px;padding:6px;text-align:center}
+  .hist button:hover{border-color:var(--acc)}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#2a1a1f;border:1px solid #5b2a33;color:#ffb4b4;padding:10px 16px;border-radius:10px;display:none;z-index:50;max-width:80vw}
+  /* pannello avanzate */
+  .drawer{position:fixed;top:0;right:0;height:100%;width:min(420px,100%);background:#0f1117;border-left:1px solid var(--line);transform:translateX(102%);transition:transform .25s;z-index:30;padding:22px;overflow:auto}
+  .drawer.open{transform:none;box-shadow:-20px 0 60px #000a}
+  .drawer h3{margin:0 0 4px}
+  .drawer .sub{color:var(--mut);font-size:13px;margin-bottom:16px}
+  .sep{height:1px;background:var(--line);margin:20px 0}
+  .foot{margin-top:22px;font-size:12px;color:#565c70}
+  .foot a{color:#565c70;text-decoration:none;border-bottom:1px dotted #3a3f52}
+  .foot a:hover{color:var(--mut)}
+  .warn{background:#2a2112;border:1px solid #5b4a1f;color:#ffd58a;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:14px;display:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"></div><h1>Kura Studio</h1><div class="sp"></div>
+  <button class="iconbtn" id="openAdv">⚙ Avanzate</button>
+</header>
+
+<main>
+  <section class="card">
+    <div class="warn" id="warn"></div>
+    <label class="l" for="prompt">Prompt</label>
+    <textarea id="prompt" spellcheck="false" placeholder="Descrivi la scena…"></textarea>
+    <div class="dim" id="dur"></div>
+
+    <div class="row two">
+      <div>
+        <label class="l">Seed</label>
+        <div class="seedrow">
+          <input type="number" id="seed" placeholder="casuale">
+          <button class="btn" id="dice" title="Seed casuale a ogni generazione">🎲</button>
+        </div>
+        <div class="dim"><label><input type="checkbox" id="lock"> blocca questo seed</label></div>
+      </div>
+      <div>
+        <label class="l">Steps <span class="val" id="stepsV"></span></label>
+        <input type="range" id="steps" min="1" max="8" step="1">
+        <div class="dim">più alto = più lento</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label class="l">Formato</label>
+        <div class="chips" id="aspects"></div>
+      </div>
+      <div>
+        <label class="l">Risoluzione <span class="val" id="mpV"></span></label>
+        <input type="range" id="mp" min="0.2" max="1.2" step="0.05">
+        <div class="dim" id="size"></div>
+      </div>
+    </div>
+
+    <button class="go" id="go">Genera video</button>
+  </section>
+
+  <section class="stage">
+    <div class="player" id="player"><div class="empty">Il video apparirà qui</div></div>
+    <div id="prog" style="display:none">
+      <div class="bar"><i id="barI"></i></div>
+      <div class="status"><span id="stTxt">In coda…</span><span id="stTime"></span></div>
+    </div>
+    <div class="actions" id="acts" style="display:none">
+      <a id="dl" href="#" download>⬇ Scarica video</a>
+      <a class="sec" id="opn" href="#" target="_blank">Apri</a>
+    </div>
+    <div>
+      <label class="l">Recenti</label>
+      <div class="hist" id="hist"></div>
+    </div>
+  </section>
+</main>
+
+<aside class="drawer" id="drawer">
+  <div style="display:flex;align-items:center"><h3>Impostazioni avanzate</h3><div style="flex:1"></div><button class="iconbtn" id="closeAdv">✕</button></div>
+  <div class="sub">Di solito non servono: i valori predefiniti sono quelli collaudati.</div>
+
+  <label class="l">Immagine di riferimento</label>
+  <input type="file" id="ref" accept="image/*">
+  <div class="dim" id="refName"></div>
+
+  <div class="sep"></div>
+  <label class="l">LoRA stile <span class="val" id="styleV"></span></label>
+  <input type="range" id="style" min="0" max="1.5" step="0.05">
+  <div style="height:14px"></div>
+  <label class="l">LoRA velocità (Tao) <span class="val" id="taoV"></span></label>
+  <input type="range" id="tao" min="0" max="1.5" step="0.05">
+
+  <div class="sep"></div>
+  <div class="row two" style="margin-top:0">
+    <div><label class="l">Shift video</label><input type="number" id="shv" step="0.5"></div>
+    <div><label class="l">Shift audio</label><input type="number" id="sha" step="0.5"></div>
+  </div>
+  <div class="row two">
+    <div><label class="l">Attenzione sparsa %</label><input type="number" id="keep" step="1" min="1" max="100"></div>
+    <div><label class="l">Sampler</label><select id="sampler"></select></div>
+  </div>
+
+  <div class="sep"></div>
+  <button class="btn" id="reset" style="padding:10px 14px">Ripristina predefiniti</button>
+  <div class="sep"></div>
+  <label class="l">Aggiornamenti</label>
+  <div class="dim" id="verTxt">…</div>
+  <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" id="updCheck" style="padding:10px 14px">Controlla</button><button class="btn" id="updGo" style="padding:10px 14px;display:none;border-color:var(--acc)">Aggiorna ora</button></div>
+  <div class="dim" id="updList" style="white-space:pre-line"></div>
+  <div class="foot">Strumenti di sistema · <a id="engineLink" href="#" target="_blank" rel="noopener">editor</a></div>
+</aside>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+let CFG=null, job=null, since=0, timer=null, t0=0, ref=null, aspect=null, running=false;
+const ASPECT_LABEL=s=>s.split(' ')[0];
+
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',6000)}
+function ls(k,v){if(v===undefined){try{return JSON.parse(localStorage.getItem('ks_'+k))}catch{return null}}localStorage.setItem('ks_'+k,JSON.stringify(v))}
+
+function sizeOf(){
+  const m=aspect.match(/^([\d.]+):([\d.]+)/);let w=+m[1],h=+m[2];
+  const mp=+$('mp').value*1e6;const r=w/h;let H=Math.sqrt(mp/r),W=H*r;
+  const q=x=>Math.max(32,Math.round(x/32)*32);return [q(W),q(H)];
+}
+function refresh(){
+  $('stepsV').textContent=$('steps').value;$('mpV').textContent=(+$('mp').value).toFixed(2)+' MP';
+  const [w,h]=sizeOf();$('size').textContent=`${w} × ${h} px`;
+  $('styleV').textContent=(+$('style').value).toFixed(2);$('taoV').textContent=(+$('tao').value).toFixed(2);
+  const p=$('player');if(!p.querySelector('video')){p.style.aspectRatio=w+' / '+h}
+}
+function buildAspects(){
+  const box=$('aspects');box.innerHTML='';
+  CFG.aspects.forEach(a=>{const c=document.createElement('div');c.className='chip'+(a===aspect?' on':'');c.textContent=ASPECT_LABEL(a);c.onclick=()=>{aspect=a;ls('aspect',a);buildAspects();refresh()};box.appendChild(c)});
+}
+async function dur(){
+  try{const r=await fetch('/api/duration',{method:'POST',body:JSON.stringify({prompt:$('prompt').value})});const j=await r.json();
+  $('dur').textContent=j.seconds?`Durata rilevata dal testo: ${j.seconds} s`:'Durata: non indicata nel testo (verrà usata quella predefinita)'}catch{}
+}
+function loadAdvanced(d){
+  $('style').value=d.style_lora;$('tao').value=d.tao_lora;$('shv').value=d.shift_video;$('sha').value=d.shift_audio;$('keep').value=d.keep_percent;
+  $('sampler').value=d.sampler;ref=null;$('refName').textContent='Predefinita: '+d.reference_image;$('ref').value='';
+}
+async function init(){
+  CFG=await (await fetch('/api/config')).json();const d=CFG.defaults;
+  $('prompt').value=ls('prompt')??d.prompt;$('steps').value=ls('steps')??d.steps;$('mp').value=ls('mp')??d.megapixels;
+  aspect=ls('aspect')||d.aspect;$('seed').value=ls('seed')??'';$('lock').checked=!!ls('lock');
+  CFG.samplers.forEach(s=>{const o=document.createElement('option');o.value=o.textContent=s;$('sampler').appendChild(o)});
+  loadAdvanced(d);buildAspects();refresh();dur();hist();
+  $('engineLink').href=CFG.engine_url;
+  const h=await (await fetch('/api/health')).json();
+  if(!h.engine){$('warn').style.display='block';$('warn').textContent='Il motore di generazione non risponde. Avvia lo script “start” e riprova.'}
+  else if(h.missing_nodes.length||(h.missing_models||[]).length){$('warn').style.display='block';$('warn').textContent='Componenti mancanti: '+[...h.missing_nodes,...(h.missing_models||[]).map(m=>'peso '+m)].join(', ')}
+}
+function payload(){
+  return{prompt:$('prompt').value,seed:$('lock').checked&&$('seed').value!==''?+$('seed').value:-1,steps:+$('steps').value,aspect,megapixels:+$('mp').value,
+    advanced:{style_lora:+$('style').value,tao_lora:+$('tao').value,shift_video:+$('shv').value,shift_audio:+$('sha').value,keep_percent:+$('keep').value,sampler:$('sampler').value,...(ref?{reference_image:ref}:{})}};
+}
+function setRunning(on){
+  running=on;const g=$('go');g.textContent=on?'Annulla':'Genera video';g.classList.toggle('stop',on);$('prog').style.display=on||job?'block':'none';
+}
+async function go(){
+  if(running){await fetch('/api/cancel',{method:'POST'});return}
+  const p=payload();ls('prompt',p.prompt);ls('steps',p.steps);ls('mp',p.megapixels);ls('lock',$('lock').checked);if($('seed').value!=='')ls('seed',+$('seed').value);
+  $('acts').style.display='none';$('barI').style.width='0';$('stTxt').textContent='Preparazione…';$('stTime').textContent='';
+  const r=await fetch('/api/generate',{method:'POST',body:JSON.stringify(p)});const j=await r.json();
+  if(!r.ok){toast('Errore: '+JSON.stringify(j.error||j).slice(0,300));return}
+  job=j.job;since=0;t0=Date.now();if(!$('lock').checked)$('seed').value=j.seed;setRunning(true);poll();
+}
+async function poll(){
+  clearTimeout(timer);if(!job)return;
+  try{
+    const j=await (await fetch(`/api/events/${job}?since=${since}`)).json();since=j.next;
+    for(const e of j.events){
+      if(e.k==='progress'){const pct=Math.round(e.v/e.m*100);$('barI').style.width=pct+'%';$('stTxt').textContent=`Generazione · passo ${e.v}/${e.m}`}
+      if(e.k==='stage'&&e.node===null){$('stTxt').textContent='Finalizzo il video…'}
+      if(e.k==='cached'){$('stTxt').textContent='Preparazione…'}
+      if(e.k==='error'){toast('Errore: '+e.msg)}
+    }
+    $('stTime').textContent=Math.round((Date.now()-t0)/1000)+' s';
+    if(j.done){setRunning(false);$('barI').style.width=j.result?'100%':'0';
+      if(j.result){show(j.result);hist()}else toast('Generazione interrotta o non riuscita');job=null;return}
+  }catch(e){}
+  timer=setTimeout(poll,700);
+}
+function url(r,dl){return `/api/video?filename=${encodeURIComponent(r.filename)}&subfolder=${encodeURIComponent(r.subfolder||'')}${dl?'&download=1':''}`}
+function show(r){
+  const p=$('player');p.innerHTML='';const v=document.createElement('video');v.src=url(r);v.controls=true;v.loop=true;v.autoplay=true;v.muted=false;v.playsInline=true;p.appendChild(v);p.style.aspectRatio='';
+  $('dl').href=url(r,true);$('dl').setAttribute('download',r.filename);$('opn').href=url(r);$('acts').style.display='flex';$('stTxt').textContent='Pronto';
+}
+async function hist(){
+  try{const j=await (await fetch('/api/history')).json();const h=$('hist');h.innerHTML='';
+    j.items.forEach(i=>{const b=document.createElement('button');b.textContent=new Date(i.mtime*1000).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' · '+i.mb+' MB';b.onclick=()=>show(i);h.appendChild(b)});
+    if(!j.items.length)h.innerHTML='<span class="dim">Nessun video ancora</span>'}catch{}
+}
+$('go').onclick=go;$('dice').onclick=()=>{$('seed').value='';$('lock').checked=false;ls('lock',false)};
+['steps','mp','style','tao'].forEach(i=>$(i).addEventListener('input',refresh));
+let dt;$('prompt').addEventListener('input',()=>{clearTimeout(dt);dt=setTimeout(dur,400)});
+$('openAdv').onclick=()=>$('drawer').classList.add('open');$('closeAdv').onclick=()=>$('drawer').classList.remove('open');
+async function updCheck(){
+  $('verTxt').textContent='Controllo…';$('updGo').style.display='none';$('updList').textContent='';
+  try{const j=await (await fetch('/api/update/check')).json();const c=j.current||{};
+    const cur=c.sha?`Versione ${c.sha.slice(0,7)} · ${c.date||''}`:'Versione non registrata';
+    if(!j.configured){$('verTxt').textContent=cur+' · aggiornamenti non configurati';return}
+    if(j.error){$('verTxt').textContent=cur+' · impossibile controllare: '+j.error;return}
+    if(j.behind>0){$('verTxt').textContent=cur+` · disponibili ${j.behind} aggiornament${j.behind>1?'i':'o'}`;$('updList').textContent=(j.changes||[]).map(x=>'• '+x).join('
+');$('updGo').style.display='inline-block';
+      if(j.dirty){$('updList').textContent+='
+(attenzione: file modificati in locale)'}}
+    else $('verTxt').textContent=cur+' · aggiornata'}catch(e){$('verTxt').textContent='Controllo non riuscito'}
+}
+$('updCheck').onclick=updCheck;
+$('updGo').onclick=async()=>{
+  $('updGo').disabled=true;$('verTxt').textContent='Aggiorno…';
+  const r=await fetch('/api/update/apply',{method:'POST'});const j=await r.json();
+  if(!r.ok){toast(j.error||'Aggiornamento non riuscito');$('updGo').disabled=false;return}
+  $('verTxt').textContent='Aggiornato: riavvio…';
+  const t=setInterval(async()=>{try{const h=await fetch('/api/health');if(h.ok){clearInterval(t);location.reload()}}catch{}},1200);
+};
+$('openAdv').addEventListener('click',updCheck);
+$('reset').onclick=()=>loadAdvanced(CFG.defaults);
+$('ref').onchange=async e=>{const f=e.target.files[0];if(!f)return;const fd=new FormData();fd.append('image',f);
+  const r=await fetch('/api/upload',{method:'POST',body:fd});const j=await r.json();ref=j.name;$('refName').textContent='Caricata: '+f.name};
+init();
+</script>
+</body>
+</html>

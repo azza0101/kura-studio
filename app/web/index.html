@@ -24,6 +24,11 @@
   textarea{resize:vertical;min-height:210px;max-height:520px;line-height:1.5}
   .row{display:grid;gap:14px;margin-top:18px}
   .row.two{grid-template-columns:1fr 1fr}
+  .refchoices{display:flex;gap:8px;flex-wrap:wrap}
+  .refchoice{width:102px;padding:5px;border:2px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--text);cursor:pointer;text-align:center;font:inherit;font-size:12px}
+  .refchoice.on{border-color:var(--acc);box-shadow:0 0 0 2px #7c5cff33}
+  .refchoice img{display:block;width:100%;height:70px;object-fit:cover;border-radius:6px;margin-bottom:4px}
+  .refchoice.upload{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100px}
   .seedrow{display:flex;gap:8px}
   .seedrow button{flex:none}
   .btn{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:0 13px;cursor:pointer;font:inherit}
@@ -78,7 +83,7 @@
     <label class="l" for="prompt">Prompt</label>
     <textarea id="prompt" spellcheck="false" placeholder="Descrivi la scena…"></textarea>
     <div class="dim" id="dur"></div>
-    <div class="row two"><div><label class="l" for="ref">Immagine di riferimento</label><input type="file" id="ref" accept="image/*"><div class="dim" id="refName"></div></div><div><label class="l" for="seconds">Durata in secondi</label><input type="number" id="seconds" min="0.25" max="30" step="any" placeholder="Automatica dal prompt" disabled><div class="dim"><label><input type="checkbox" id="manualDuration"> Durata manuale</label></div><div class="dim" id="durationActual">Automatica dal prompt</div></div></div>
+    <div class="row two"><div><label class="l">Immagine di riferimento</label><div class="refchoices" role="group" aria-label="Scegli immagine di riferimento"><button type="button" class="refchoice on" id="refGiulia" aria-pressed="true"><img src="/api/reference/giulia" alt="">Giulia</button><button type="button" class="refchoice" id="refGeneric" aria-pressed="false"><img src="/api/reference/generic" alt="">Generic</button><button type="button" class="refchoice upload" id="refUpload" aria-pressed="false"><span style="font-size:27px">＋</span>Carica</button></div><input type="file" id="ref" accept="image/*" hidden><div class="dim" id="refName">Giulia · predefinita</div><div class="dim" id="refHint" hidden>Il prompt fisso cita Giulia: se necessario modificalo in Avanzate.</div></div><div><label class="l" for="seconds">Durata in secondi</label><input type="number" id="seconds" min="0.25" max="30" step="any" placeholder="Automatica dal prompt" disabled><div class="dim"><label><input type="checkbox" id="manualDuration"> Durata manuale</label></div><div class="dim" id="durationActual">Automatica dal prompt</div></div></div>
 
     <div class="row two">
       <div>
@@ -184,7 +189,7 @@
 
 <script>
 const $=id=>document.getElementById(id);
-let CFG=null, job=null, since=0, timer=null, t0=0, ref=null, aspect=null, running=false, currentNode=null;
+let CFG=null, job=null, since=0, timer=null, t0=0, ref=null, reference="giulia", aspect=null, running=false, currentNode=null;
 const ASPECT_LABEL=s=>s.split(' ')[0];
 
 function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',6000)}
@@ -212,7 +217,7 @@ async function dur(){
 }
 function loadAdvanced(d){
   $('style').value=d.style_lora;$('tao').value=d.tao_lora;$('shv').value=d.shift_video;$('sha').value=d.shift_audio;$('keep').value=d.keep_percent;
-  $('sampler').value=d.sampler;ref=null;$('refName').textContent='Predefinita: '+d.reference_image;$('ref').value='';
+  $('sampler').value=d.sampler;selectReference('giulia');$('ref').value='';
 }
 async function init(){
   CFG=await (await fetch('/api/config')).json();const d=CFG.defaults;
@@ -235,7 +240,7 @@ async function init(){
   else if(h.missing_nodes.length||(h.missing_models||[]).length){$('warn').style.display='block';$('warn').textContent='Componenti mancanti: '+[...h.missing_nodes,...(h.missing_models||[]).map(m=>'peso '+m)].join(', ')}
 }
 function payload(){
-  return{prompt:$('prompt').value,fixed_prompt:$('fixedEnabled').checked?$('fixedPrompt').value:'',seed:$('lock').checked&&$('seed').value!==''?+$('seed').value:-1,steps:+$('steps').value,aspect,megapixels:+$('mp').value,seconds:$('manualDuration').checked?+$('seconds').value:null,
+  return{reference,prompt:$('prompt').value,fixed_prompt:$('fixedEnabled').checked?$('fixedPrompt').value:'',seed:$('lock').checked&&$('seed').value!==''?+$('seed').value:-1,steps:+$('steps').value,aspect,megapixels:+$('mp').value,seconds:$('manualDuration').checked?+$('seconds').value:null,
     advanced:{style_lora:+$('style').value,tao_lora:+$('tao').value,shift_video:+$('shv').value,shift_audio:+$('sha').value,keep_percent:+$('keep').value,sampler:$('sampler').value,scheduler:$('scheduler').value,denoise:+$('denoise').value,start_percent:+$('attStart').value,end_percent:+$('attEnd').value,min_tokens:+$('minTokens').value,extra_tokens:+$('extraTokens').value,frame_rate:+$('fps').value,loop_count:+$('loops').value,bitrate:+$('bitrate').value,crf:+$('crf').value,...(ref?{reference_image:ref}:{})}};
 }
 function setRunning(on){
@@ -321,8 +326,15 @@ $('debug').onclick=async()=>{try{const r=await fetch('/api/debug/preview');const
 $('debugClose').onclick=()=>$('debugDialog').close();
 $('debugSend').onclick=async()=>{$('debugSend').disabled=true;$('debugStatus').textContent='Invio in corso…';try{const r=await fetch('/api/debug/send',{method:'POST',body:JSON.stringify({id:debugId})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Invio non riuscito');$('debugStatus').textContent='Segnalazione creata: '+j.url}catch(e){$('debugStatus').textContent=e.message+' Prepara una nuova anteprima per riprovare.'}};
 $('reset').onclick=()=>{loadAdvanced(CFG.defaults);$('scheduler').value='beta';$('denoise').value=1;$('attStart').value=0;$('attEnd').value=1;$('minTokens').value=12288;$('extraTokens').value=256;$('fps').value=24;$('loops').value=0;$('bitrate').value=10;$('crf').value=19;refresh()};
+function selectReference(name, filename=''){
+  reference=name; if(name!=='custom') ref=null;
+  for(const [key,id] of [['giulia','refGiulia'],['generic','refGeneric'],['custom','refUpload']]){const on=name===key;$(id).classList.toggle('on',on);$(id).setAttribute('aria-pressed',String(on))}
+  $('refName').textContent=name==='giulia'?'Giulia · predefinita':name==='generic'?'Generic · immagine KURA':'Caricata: '+filename;
+  $('refHint').hidden=name==='giulia';
+}
+$('refGiulia').onclick=()=>selectReference('giulia');$('refGeneric').onclick=()=>selectReference('generic');$('refUpload').onclick=()=>$('ref').click();
 $('ref').onchange=async e=>{const f=e.target.files[0];if(!f)return;const fd=new FormData();fd.append('image',f);
-  const r=await fetch('/api/upload',{method:'POST',body:fd});const j=await r.json();ref=j.name;$('refName').textContent='Caricata: '+f.name};
+  try{const r=await fetch('/api/upload',{method:'POST',body:fd});const j=await r.json();if(!r.ok||!j.name)throw new Error(j.error||'Caricamento non riuscito');ref=j.name;selectReference('custom',f.name)}catch(err){toast('Errore reference: '+err.message)}finally{e.target.value=''}};
 init();
 </script>
 </body>

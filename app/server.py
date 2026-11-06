@@ -34,7 +34,20 @@ DEFAULT_FIXED_PROMPT = (HERE / "assets" / "global_kura_style.txt").read_text(enc
 JOBS = {}      # job_id -> {"prompt_id", "events": [..], "done": bool, "result": {...}}
 REPORTS = {}
 CLIENT_ID = str(uuid.uuid4())
-DEFAULT_REFERENCE = None
+DEFAULT_REFERENCE = {}
+BUILTIN_REFERENCES = {"giulia": HERE / "assets" / "giulia-reference.jpg", "generic": HERE / "assets" / "generic-reference.png"}
+
+def reference_path(name):
+    if name not in BUILTIN_REFERENCES:
+        raise ValueError("Reference non riconosciuta")
+    return BUILTIN_REFERENCES[name]
+
+async def h_reference(request):
+    try:
+        path = reference_path(request.match_info["name"])
+    except ValueError:
+        raise web.HTTPNotFound()
+    return web.FileResponse(path)
 
 
 def read_timing(video):
@@ -302,18 +315,27 @@ async def h_generate(request):
         await load_object_info()
     wf, seed = build_workflow(body)
     async with aiohttp.ClientSession() as s:
-        if not (body.get("advanced") or {}).get("reference_image") and (HERE / "assets" / "giulia-reference.jpg").is_file():
-            if DEFAULT_REFERENCE is None:
-                image = (HERE / "assets" / "giulia-reference.jpg").read_bytes()
+        if not (body.get("advanced") or {}).get("reference_image"):
+            selected = body.get("reference", "giulia")
+            try:
+                path = reference_path(selected)
+            except ValueError:
+                return web.json_response({"error": "Reference non riconosciuta"}, status=400)
+            if not path.is_file():
+                return web.json_response({"error": "Immagine di riferimento mancante"}, status=500)
+            if selected not in DEFAULT_REFERENCE:
+                import hashlib
+                image = path.read_bytes()
+                filename = "kura-" + selected + "-" + hashlib.sha256(image).hexdigest()[:12] + path.suffix
                 form = aiohttp.FormData()
-                form.add_field("image", image, filename="kura-giulia-3c17d521.jpg", content_type="image/jpeg")
-                form.add_field("overwrite", "false")
+                form.add_field("image", image, filename=filename, content_type="image/png" if path.suffix == ".png" else "image/jpeg")
+                form.add_field("overwrite", "true")
                 async with s.post(ENGINE + "/upload/image", data=form) as response:
                     if response.status != 200:
-                        return web.json_response({"error": "Impossibile caricare la reference predefinita nel motore"}, status=502)
+                        return web.json_response({"error": "Impossibile caricare la reference nel motore"}, status=502)
                     info = await response.json()
-                    DEFAULT_REFERENCE = (info.get("subfolder", "") + "/" if info.get("subfolder") else "") + info["name"]
-            wf["7"]["inputs"]["image"] = DEFAULT_REFERENCE
+                    DEFAULT_REFERENCE[selected] = (info.get("subfolder", "") + "/" if info.get("subfolder") else "") + info["name"]
+            wf["7"]["inputs"]["image"] = DEFAULT_REFERENCE[selected]
         started_at = time.monotonic()
         async with s.post(ENGINE + "/prompt", json={"prompt": wf, "client_id": CLIENT_ID}) as r:
             data = await r.json()
@@ -486,7 +508,7 @@ async def h_upd_apply(request):
 
 app = web.Application(client_max_size=200 * 1024 * 1024)
 app.add_routes([
-    web.get("/", h_index), web.get("/api/config", h_config), web.post("/api/duration", h_duration), web.get("/api/health", h_health),
+    web.get("/", h_index), web.get("/api/reference/{name}", h_reference), web.get("/api/config", h_config), web.post("/api/duration", h_duration), web.get("/api/health", h_health),
     web.post("/api/generate", h_generate), web.get("/api/events/{job}", h_events), web.post("/api/cancel", h_cancel),
     web.get("/api/video", h_video), web.post("/api/upload", h_upload), web.get("/api/history", h_history),
     web.get("/api/update/check", h_upd_check), web.post("/api/update/apply", h_upd_apply),

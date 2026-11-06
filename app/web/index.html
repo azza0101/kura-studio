@@ -83,7 +83,7 @@
     <label class="l" for="prompt">Prompt</label>
     <textarea id="prompt" spellcheck="false" placeholder="Descrivi la scena…"></textarea>
     <div class="dim" id="dur"></div>
-    <div class="row two"><div><label class="l">Immagine di riferimento</label><div class="refchoices" role="group" aria-label="Scegli immagine di riferimento"><button type="button" class="refchoice on" id="refGiulia" aria-pressed="true"><img src="/api/reference/giulia" alt="">Giulia</button><button type="button" class="refchoice" id="refGeneric" aria-pressed="false"><img src="/api/reference/generic" alt="">Generic</button><button type="button" class="refchoice upload" id="refUpload" aria-pressed="false"><span style="font-size:27px">＋</span>Carica</button></div><input type="file" id="ref" accept="image/*" hidden><div class="dim" id="refName">Giulia · predefinita</div><div class="dim" id="refHint" hidden>Il prompt fisso cita Giulia: se necessario modificalo in Avanzate.</div></div><div><label class="l" for="seconds">Durata in secondi</label><input type="number" id="seconds" min="0.25" max="30" step="any" placeholder="Automatica dal prompt" disabled><div class="dim"><label><input type="checkbox" id="manualDuration"> Durata manuale</label></div><div class="dim" id="durationActual">Automatica dal prompt</div></div></div>
+    <div class="row two"><div><label class="l">Immagine di riferimento</label><div class="refchoices" role="group" aria-label="Scegli immagine di riferimento"><button type="button" class="refchoice on" id="refGiulia" aria-pressed="true"><img src="/api/reference/giulia" alt="">Giulia</button><button type="button" class="refchoice" id="refGeneric" aria-pressed="false"><img src="/api/reference/generic" alt="">Generic</button><button type="button" class="refchoice upload" id="refUpload" aria-pressed="false"><span style="font-size:27px">＋</span>Carica</button></div><input type="file" id="ref" accept="image/*" hidden><div class="dim" id="refName">Giulia · predefinita</div><div class="dim" id="refHint" hidden>Prompt fisso generico attivo: controlla che anche il prompt della scena sia coerente.</div></div><div><label class="l" for="seconds">Durata in secondi</label><input type="number" id="seconds" min="0.25" max="30" step="any" placeholder="Automatica dal prompt" disabled><div class="dim"><label><input type="checkbox" id="manualDuration"> Durata manuale</label></div><div class="dim" id="durationActual">Automatica dal prompt</div></div></div>
 
     <div class="row two">
       <div>
@@ -223,8 +223,7 @@ async function init(){
   CFG=await (await fetch('/api/config')).json();const d=CFG.defaults;
   $('appVersion').textContent='v'+(CFG.version||'2');
   const savedFixed=ls('fixedPrompt'),oldFixed=(d.prompt||'').split('FORMAT:')[0].trim();
-  $('fixedPrompt').value=savedFixed===null||savedFixed===oldFixed?(CFG.fixed_prompt_original||''):savedFixed;
-  if(savedFixed===oldFixed)ls('fixedPrompt',$('fixedPrompt').value);
+  if(savedFixed===oldFixed)ls('fixedPrompt',CFG.fixed_prompt_original||'');
   $('fixedEnabled').checked=ls('fixedEnabled')??true;
   $('prompt').value=ls('prompt')??d.prompt;$('steps').value=ls('steps')??d.steps;$('mp').value=ls('mp')??d.megapixels;
   aspect=ls('aspect')||d.aspect;$('seed').value=ls('seed')??'';$('lock').checked=!!ls('lock');
@@ -296,9 +295,12 @@ $('go').onclick=go;$('dice').onclick=()=>{$('seed').value='';$('lock').checked=f
 ['steps','mp','style','tao','seconds'].forEach(i=>$(i).addEventListener('input',refresh));
 $('manualDuration').onchange=()=>{$('seconds').disabled=!$('manualDuration').checked;refresh()};
 $('fixedUnlock').onchange=()=>{$('fixedPrompt').readOnly=!$('fixedUnlock').checked};
-$('fixedPrompt').addEventListener('input',()=>ls('fixedPrompt',$('fixedPrompt').value));
+function fixedKey(){return reference==='giulia'?'fixedPrompt':'fixedPromptGeneric'}
+function fixedOriginal(){return reference==='giulia'?CFG.fixed_prompt_original:CFG.fixed_prompt_generic}
+function loadFixed(){if(!CFG)return;$('fixedPrompt').value=ls(fixedKey())??fixedOriginal();$('fixedUnlock').checked=false;$('fixedPrompt').readOnly=true}
+$('fixedPrompt').addEventListener('input',()=>ls(fixedKey(),$('fixedPrompt').value));
 $('fixedEnabled').onchange=()=>ls('fixedEnabled',$('fixedEnabled').checked);
-$('fixedRestore').onclick=()=>{$('fixedPrompt').value=CFG.fixed_prompt_original;ls('fixedPrompt',$('fixedPrompt').value);$('fixedUnlock').checked=false;$('fixedPrompt').readOnly=true;toast('Prompt fisso originale ripristinato.')};
+$('fixedRestore').onclick=()=>{$('fixedPrompt').value=fixedOriginal();ls(fixedKey(),$('fixedPrompt').value);$('fixedUnlock').checked=false;$('fixedPrompt').readOnly=true;toast('Prompt fisso originale ripristinato.')};
 let dt;$('prompt').addEventListener('input',()=>{clearTimeout(dt);dt=setTimeout(dur,400)});
 $('openAdv').onclick=()=>$('drawer').classList.add('open');$('closeAdv').onclick=()=>$('drawer').classList.remove('open');
 async function updCheck(){
@@ -327,7 +329,7 @@ $('debugClose').onclick=()=>$('debugDialog').close();
 $('debugSend').onclick=async()=>{$('debugSend').disabled=true;$('debugStatus').textContent='Invio in corso…';try{const r=await fetch('/api/debug/send',{method:'POST',body:JSON.stringify({id:debugId})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Invio non riuscito');$('debugStatus').textContent='Segnalazione creata: '+j.url}catch(e){$('debugStatus').textContent=e.message+' Prepara una nuova anteprima per riprovare.'}};
 $('reset').onclick=()=>{loadAdvanced(CFG.defaults);$('scheduler').value='beta';$('denoise').value=1;$('attStart').value=0;$('attEnd').value=1;$('minTokens').value=12288;$('extraTokens').value=256;$('fps').value=24;$('loops').value=0;$('bitrate').value=10;$('crf').value=19;refresh()};
 function selectReference(name, filename=''){
-  reference=name; if(name!=='custom') ref=null;
+  reference=name; if(name!=='custom') ref=null; loadFixed();
   for(const [key,id] of [['giulia','refGiulia'],['generic','refGeneric'],['custom','refUpload']]){const on=name===key;$(id).classList.toggle('on',on);$(id).setAttribute('aria-pressed',String(on))}
   $('refName').textContent=name==='giulia'?'Giulia · predefinita':name==='generic'?'Generic · immagine KURA':'Caricata: '+filename;
   $('refHint').hidden=name==='giulia';

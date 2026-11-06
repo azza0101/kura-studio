@@ -69,7 +69,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('NO visible white sclera', server.DEFAULT_FIXED_PROMPT)
 
     def test_visible_version_has_explicit_release_number(self):
-        self.assertEqual(server.APP_VERSION, '2.1.2')
+        self.assertEqual(server.APP_VERSION, '2.1.3')
 
     def test_original_block_without_new_eyes_is_not_duplicated(self):
         old = server.DEFAULT_FIXED_PROMPT.split('\n\nREGOLA PERMANENTE — EYES')[0]

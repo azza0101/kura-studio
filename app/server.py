@@ -31,6 +31,7 @@ OBJECT_INFO = {}                                    # cache di /object_info per 
 TEMPLATE = json.load(open(HERE / "workflow_api.json", encoding="utf8"))
 OPTS = json.load(open(HERE / "options.json", encoding="utf8"))
 DEFAULT_FIXED_PROMPT = (HERE / "assets" / "global_kura_style.txt").read_text(encoding="utf-8").strip()
+GENERIC_FIXED_PROMPT = (HERE / "assets" / "global_kura_generic.txt").read_text(encoding="utf-8").strip()
 JOBS = {}      # job_id -> {"prompt_id", "events": [..], "done": bool, "result": {...}}
 REPORTS = {}
 CLIENT_ID = str(uuid.uuid4())
@@ -264,7 +265,7 @@ async def h_config(request):
     def choices(cls, field, fallback):
         return node_choices(OBJECT_INFO, cls, field) or fallback
     fallback_samplers = OPTS["samplers"] if isinstance(OPTS["samplers"], list) else [OPTS["defaults"]["sampler"]]
-    return web.json_response({"version": APP_VERSION, "defaults": OPTS["defaults"], "fixed_prompt_original": DEFAULT_FIXED_PROMPT, "aspects": OPTS["aspects"], "samplers": choices("KSamplerSelect", "sampler_name", fallback_samplers),
+    return web.json_response({"version": APP_VERSION, "defaults": OPTS["defaults"], "fixed_prompt_original": DEFAULT_FIXED_PROMPT, "fixed_prompt_generic": GENERIC_FIXED_PROMPT, "aspects": OPTS["aspects"], "samplers": choices("KSamplerSelect", "sampler_name", fallback_samplers),
                               "schedulers": choices("BasicScheduler", "scheduler", ["beta"]),
                               "duration": parse_duration(OPTS["defaults"]["prompt"]), "engine_url": ENGINE})
 

@@ -19,7 +19,7 @@
   @media(max-width:920px){main{grid-template-columns:1fr}}
   .card{background:linear-gradient(180deg,var(--panel),#11131a);border:1px solid var(--line);border-radius:var(--r);padding:20px}
   label.l{display:block;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:var(--mut);margin:0 0 8px}
-  textarea,input[type=text],input[type=number],select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);font:inherit;padding:11px 13px;outline:none}
+  textarea,input[type=text],input[type=number],input[type=password],select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);font:inherit;padding:11px 13px;outline:none}
   textarea:focus,input:focus,select:focus{border-color:var(--acc);box-shadow:0 0 0 3px #7c5cff22}
   textarea{resize:vertical;min-height:210px;max-height:520px;line-height:1.5}
   .row{display:grid;gap:14px;margin-top:18px}
@@ -161,14 +161,23 @@
   <div class="dim" id="verTxt">…</div>
   <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" id="updCheck" style="padding:10px 14px">Controlla</button><button class="btn" id="updGo" style="padding:10px 14px;display:none;border-color:var(--acc)">Aggiorna ora</button></div>
   <div class="dim" id="updList" style="white-space:pre-line"></div>
+  <div class="sep"></div><label class="l">Assistenza</label>
+  <div class="dim">Prepara un report tecnico per segnalare un problema su GitHub.</div>
+  <button class="btn" id="debug" style="padding:10px 14px;margin-top:10px">Prepara debug</button>
+  <div class="row"><div><label class="l" for="githubToken">Token GitHub per le issue</label><input type="password" id="githubToken" autocomplete="new-password" placeholder="Incolla il token"><div class="dim">Salvato in chiaro nella configurazione locale su questo PC; serve il permesso di scrivere issue nel repository.</div><button class="btn" id="saveToken" style="padding:10px;margin-top:8px">Salva token</button></div></div>
   <div class="foot">Strumenti di sistema · <a id="engineLink" href="#" target="_blank" rel="noopener">editor</a></div>
 </aside>
 
 <div class="toast" id="toast"></div>
+<dialog id="debugDialog" style="background:#14161d;color:#e8eaf0;border:1px solid #3a3f52;border-radius:14px;max-width:min(650px,90vw);padding:24px">
+  <h3>Anteprima del report</h3><p>La segnalazione sarà pubblica su GitHub. Controlla il contenuto prima di inviarla.</p>
+  <pre id="debugBody" style="white-space:pre-wrap;max-height:45vh;overflow:auto;background:#0b0c10;padding:12px"></pre>
+  <p class="dim" id="debugStatus"></p><button class="btn" id="debugClose" style="padding:10px">Chiudi</button> <button class="btn" id="debugSend" style="padding:10px">Invia su GitHub</button>
+</dialog>
 
 <script>
 const $=id=>document.getElementById(id);
-let CFG=null, job=null, since=0, timer=null, t0=0, ref=null, aspect=null, running=false;
+let CFG=null, job=null, since=0, timer=null, t0=0, ref=null, aspect=null, running=false, currentNode=null;
 const ASPECT_LABEL=s=>s.split(' ')[0];
 
 function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',6000)}
@@ -224,15 +233,15 @@ async function go(){
   $('acts').style.display='none';$('barI').style.width='0';$('stTxt').textContent='Preparazione…';$('stTime').textContent='';
   const r=await fetch('/api/generate',{method:'POST',body:JSON.stringify(p)});const j=await r.json();
   if(!r.ok){toast('Errore: '+JSON.stringify(j.error||j).slice(0,300));return}
-  job=j.job;since=0;t0=Date.now();if(!$('lock').checked)$('seed').value=j.seed;setRunning(true);poll();
+  job=j.job;since=0;currentNode=null;t0=Date.now();$('stTxt').textContent='In coda · richiesta accettata';if(!$('lock').checked)$('seed').value=j.seed;setRunning(true);poll();
 }
 async function poll(){
   clearTimeout(timer);if(!job)return;
   try{
     const j=await (await fetch(`/api/events/${job}?since=${since}`)).json();since=j.next;
     for(const e of j.events){
-      if(e.k==='progress'){const pct=Math.round(e.v/e.m*100);$('barI').style.width=pct+'%';$('stTxt').textContent=`Generazione · passo ${e.v}/${e.m}`}
-      if(e.k==='stage'&&e.node===null){$('stTxt').textContent='Finalizzo il video…'}
+      if(e.k==='progress'){const pct=Math.round(e.v/e.m*100);$('barI').style.width=pct+'%';$('stTxt').textContent=currentNode==='76'?`Generazione · step ${e.v}/${e.m} · ${pct}%`:`Elaborazione · ${e.v}/${e.m} · ${pct}%`}
+      if(e.k==='stage'){currentNode=e.node;const stage={'1':'Carico il decoder audio','2':'Carico il modello testo','5':'Carico il decoder video','7':'Carico la reference','9':'Carico il decoder video','66':'Carico il modello video','70':'Preparo prompt e reference','76':'Generazione · avvio degli step','77':'Decodifico il video','78':'Decodifico l’audio','79':'Esporto il video'};$('stTxt').textContent=e.node===null?'Finalizzo il video…':(stage[e.node]||'Preparazione del modello…');if(e.node==='76')$('barI').style.width='0%'}
       if(e.k==='cached'){$('stTxt').textContent='Preparazione…'}
       if(e.k==='error'){toast('Errore: '+e.msg)}
     }
@@ -276,6 +285,11 @@ $('updGo').onclick=async()=>{
   const t=setInterval(async()=>{try{const h=await fetch('/api/health');if(h.ok){clearInterval(t);location.reload()}}catch{}},1200);
 };
 $('openAdv').addEventListener('click',updCheck);
+let debugId=null;
+$('saveToken').onclick=async()=>{try{const r=await fetch('/api/debug/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:$('githubToken').value})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Salvataggio non riuscito');$('githubToken').value='';toast('Token salvato su questo PC.')}catch(e){toast(e.message)}};
+$('debug').onclick=async()=>{try{const r=await fetch('/api/debug/preview');const j=await r.json();if(!r.ok)throw new Error(j.error||'Impossibile preparare il report');debugId=j.id;$('debugBody').textContent=j.body;$('debugStatus').textContent='';$('debugSend').disabled=false;$('debugDialog').showModal()}catch(e){toast(e.message)}};
+$('debugClose').onclick=()=>$('debugDialog').close();
+$('debugSend').onclick=async()=>{$('debugSend').disabled=true;$('debugStatus').textContent='Invio in corso…';try{const r=await fetch('/api/debug/send',{method:'POST',body:JSON.stringify({id:debugId})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Invio non riuscito');$('debugStatus').textContent='Segnalazione creata: '+j.url}catch(e){$('debugStatus').textContent=e.message+' Prepara una nuova anteprima per riprovare.'}};
 $('reset').onclick=()=>{loadAdvanced(CFG.defaults);$('scheduler').value='beta';$('denoise').value=1;$('attStart').value=0;$('attEnd').value=1;$('minTokens').value=12288;$('extraTokens').value=256;$('fps').value=24;$('loops').value=0;$('bitrate').value=10;$('crf').value=19;refresh()};
 $('ref').onchange=async e=>{const f=e.target.files[0];if(!f)return;const fd=new FormData();fd.append('image',f);
   const r=await fetch('/api/upload',{method:'POST',body:fd});const j=await r.json();ref=j.name;$('refName').textContent='Caricata: '+f.name};

@@ -16,6 +16,7 @@ from aiohttp import web
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # il python 'embedded' non aggiunge la cartella dello script
 import updater
+import diagnostics
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -29,6 +30,7 @@ OBJECT_INFO = {}                                    # cache di /object_info per 
 TEMPLATE = json.load(open(HERE / "workflow_api.json", encoding="utf8"))
 OPTS = json.load(open(HERE / "options.json", encoding="utf8"))
 JOBS = {}      # job_id -> {"prompt_id", "events": [..], "done": bool, "result": {...}}
+REPORTS = {}
 CLIENT_ID = str(uuid.uuid4())
 
 
@@ -173,6 +175,7 @@ async def watch(job_id, prompt_id):
                         elif t == "execution_cached":
                             job["events"].append({"k": "cached", "n": len(data.get("nodes", []))})
                         elif t == "execution_error":
+                            diagnostics.record("generation_error", data.get("exception_type"), data.get("node_type"))
                             job["events"].append({"k": "error", "msg": data.get("exception_message", "errore")})
                             job["done"] = True
                             return
@@ -193,6 +196,7 @@ async def watch(job_id, prompt_id):
                 await asyncio.sleep(0.5)
         job["events"].append({"k": "done", "t": round(time.time() - t0, 1)})
     except Exception as e:
+        diagnostics.record("engine_unavailable")
         job["events"].append({"k": "error", "msg": str(e)})
     job["done"] = True
 
@@ -262,6 +266,7 @@ async def h_generate(request):
             if r.status != 200 or "prompt_id" not in data:
                 return web.json_response({"error": data.get("error", data), "node_errors": data.get("node_errors")}, status=400)
     job_id = uuid.uuid4().hex[:10]
+    diagnostics.record("generation_submitted")
     JOBS[job_id] = {"prompt_id": data["prompt_id"], "events": [], "done": False, "result": None, "seed": seed}
     asyncio.create_task(watch(job_id, data["prompt_id"]))
     asyncio.create_task(watch_history(job_id, data["prompt_id"]))
@@ -277,6 +282,7 @@ async def watch_history(job_id, prompt_id):
                 async with s.get(f"{ENGINE}/history/{prompt_id}") as response:
                     history = (await response.json()).get(prompt_id)
                 if history and history.get("status", {}).get("completed"):
+                    diagnostics.record("generation_completed")
                     for output in history.get("outputs", {}).values():
                         if output.get("gifs"):
                             g = output["gifs"][-1]
@@ -284,6 +290,7 @@ async def watch_history(job_id, prompt_id):
                     job["done"] = True
                     return
                 if history and history.get("status", {}).get("status_str") == "error":
+                    diagnostics.record("generation_error")
                     job["events"].append({"k": "error", "msg": "Il motore ha segnalato un errore; controlla il log di ComfyUI."})
                     job["done"] = True
                     return
@@ -323,6 +330,47 @@ async def h_cancel(request):
                     raise web.HTTPBadGateway(text="Impossibile arrestare la generazione")
         else:
             return web.json_response({"error": "Il lavoro non è più in coda"}, status=409)
+    diagnostics.record("generation_cancelled")
+    return web.json_response({"ok": True})
+
+
+async def h_debug_preview(request):
+    health = await h_health(request)
+    status = json.loads(health.text)
+    version = updater.local_version().get("sha", "")[:12]
+    body = diagnostics.report(version, status["engine"], status["missing_nodes"])
+    report_id = uuid.uuid4().hex
+    REPORTS.clear()
+    REPORTS[report_id] = body
+    return web.json_response({"id": report_id, "body": body})
+
+
+async def h_debug_send(request):
+    origin = request.headers.get("Origin")
+    if origin and origin != f"http://{request.host}":
+        raise web.HTTPForbidden()
+    data = await request.json()
+    body = REPORTS.pop(data.get("id"), None)
+    if body is None:
+        return web.json_response({"error": "Anteprima scaduta: prepara un nuovo report."}, status=400)
+    try:
+        url = await asyncio.get_running_loop().run_in_executor(None, diagnostics.send, body, CFG.get("debug_token"))
+        return web.json_response({"url": url})
+    except RuntimeError as exc:
+        return web.json_response({"error": str(exc)}, status=400)
+
+
+async def h_debug_token(request):
+    origin = request.headers.get("Origin")
+    if origin and origin != f"http://{request.host}":
+        raise web.HTTPForbidden()
+    data = await request.json()
+    token = data.get("token", "").strip()
+    if not token or len(token) > 1024 or any(c in token for c in "\r\n"):
+        return web.json_response({"error": "Token non valido"}, status=400)
+    CFG["debug_token"] = token
+    config_path = ROOT / "config.json"
+    config_path.write_text(json.dumps(CFG, ensure_ascii=False, indent=2), encoding="utf-8")
     return web.json_response({"ok": True})
 
 
@@ -387,6 +435,8 @@ app.add_routes([
     web.post("/api/generate", h_generate), web.get("/api/events/{job}", h_events), web.post("/api/cancel", h_cancel),
     web.get("/api/video", h_video), web.post("/api/upload", h_upload), web.get("/api/history", h_history),
     web.get("/api/update/check", h_upd_check), web.post("/api/update/apply", h_upd_apply),
+    web.get("/api/debug/preview", h_debug_preview), web.post("/api/debug/send", h_debug_send),
+    web.post("/api/debug/token", h_debug_token),
 ])
 
 if __name__ == "__main__":

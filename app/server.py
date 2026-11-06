@@ -35,6 +35,30 @@ CLIENT_ID = str(uuid.uuid4())
 DEFAULT_REFERENCE = None
 
 
+def read_timing(video):
+    try:
+        value = json.loads(video.with_suffix(video.suffix + '.kura.json').read_text(encoding='utf-8'))['elapsed_seconds']
+        return float(value) if 0 <= float(value) < 1e8 else None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def finish_timing(job):
+    if job.get('elapsed_seconds') is not None or not job.get('result') or job.get('started_at') is None:
+        return
+    result = job['result']
+    filename = result.get('filename', '')
+    if Path(filename).name != filename or result.get('subfolder') != 'KuraStudio':
+        return
+    job['elapsed_seconds'] = round(max(0, time.monotonic() - job['started_at']), 1)
+    video = OUT_DIR / 'KuraStudio' / filename
+    try:
+        if video.is_file():
+            video.with_suffix(video.suffix + '.kura.json').write_text(json.dumps({'elapsed_seconds': job['elapsed_seconds']}), encoding='utf-8')
+    except OSError:
+        pass
+
+
 def aspect_size(aspect, mp, swap=False, multiple=32):
     m = re.match(r"\s*([\d.]+)\s*:\s*([\d.]+)", aspect)
     w, h = float(m.group(1)), float(m.group(2))
@@ -199,6 +223,7 @@ async def watch(job_id, prompt_id):
     except Exception as e:
         diagnostics.record("engine_unavailable")
         job["events"].append({"k": "error", "msg": str(e)})
+    finish_timing(job)
     job["done"] = True
 
 
@@ -275,13 +300,14 @@ async def h_generate(request):
                     info = await response.json()
                     DEFAULT_REFERENCE = (info.get("subfolder", "") + "/" if info.get("subfolder") else "") + info["name"]
             wf["7"]["inputs"]["image"] = DEFAULT_REFERENCE
+        started_at = time.monotonic()
         async with s.post(ENGINE + "/prompt", json={"prompt": wf, "client_id": CLIENT_ID}) as r:
             data = await r.json()
             if r.status != 200 or "prompt_id" not in data:
                 return web.json_response({"error": data.get("error", data), "node_errors": data.get("node_errors")}, status=400)
     job_id = uuid.uuid4().hex[:10]
     diagnostics.record("generation_submitted")
-    JOBS[job_id] = {"prompt_id": data["prompt_id"], "events": [], "done": False, "result": None, "seed": seed}
+    JOBS[job_id] = {"prompt_id": data["prompt_id"], "events": [], "done": False, "result": None, "seed": seed, "started_at": started_at}
     asyncio.create_task(watch(job_id, data["prompt_id"]))
     asyncio.create_task(watch_history(job_id, data["prompt_id"]))
     return web.json_response({"job": job_id, "seed": seed})
@@ -301,6 +327,7 @@ async def watch_history(job_id, prompt_id):
                         if output.get("gifs"):
                             g = output["gifs"][-1]
                             job["result"] = {"filename": g["filename"], "subfolder": g.get("subfolder", ""), "type": g.get("type", "output")}
+                    finish_timing(job)
                     job["done"] = True
                     return
                 if history and history.get("status", {}).get("status_str") == "error":
@@ -318,7 +345,7 @@ async def h_events(request):
     if not job:
         return web.json_response({"error": "job sconosciuto"}, status=404)
     since = int(request.query.get("since", 0))
-    return web.json_response({"events": job["events"][since:], "next": len(job["events"]), "done": job["done"], "result": job["result"]})
+    return web.json_response({"events": job["events"][since:], "next": len(job["events"]), "done": job["done"], "result": job["result"], "elapsed_seconds": job.get("elapsed_seconds")})
 
 
 async def h_cancel(request):
@@ -422,7 +449,7 @@ async def h_history(request):
         for p in sorted(d.glob("*.mp4"), key=lambda x: x.stat().st_mtime, reverse=True):
             if not p.name.endswith("-audio.mp4") and p.with_name(p.stem + "-audio.mp4").exists():
                 continue
-            items.append({"filename": p.name, "subfolder": "KuraStudio", "mtime": int(p.stat().st_mtime), "mb": round(p.stat().st_size / 1e6, 1)})
+            items.append({"filename": p.name, "subfolder": "KuraStudio", "mtime": int(p.stat().st_mtime), "mb": round(p.stat().st_size / 1e6, 1), "elapsed_seconds": read_timing(p)})
             if len(items) >= 100:
                 break
     return web.json_response({"items": items})

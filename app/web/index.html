@@ -211,9 +211,12 @@ async function init(){
   CFG=await (await fetch('/api/config')).json();const d=CFG.defaults;
   $('prompt').value=ls('prompt')??d.prompt;$('steps').value=ls('steps')??d.steps;$('mp').value=ls('mp')??d.megapixels;
   aspect=ls('aspect')||d.aspect;$('seed').value=ls('seed')??'';$('lock').checked=!!ls('lock');
-  CFG.samplers.forEach(s=>{const o=document.createElement('option');o.value=o.textContent=s;$('sampler').appendChild(o)});
+  if(!CFG.aspects.includes(aspect))aspect=d.aspect;
+  buildAspects();
+  const samplerOptions=Array.isArray(CFG.samplers)?CFG.samplers:[d.sampler||'euler'];
+  samplerOptions.forEach(s=>{const o=document.createElement('option');o.value=o.textContent=s;$('sampler').appendChild(o)});
   (CFG.schedulers||['beta']).forEach(s=>{const o=document.createElement('option');o.value=o.textContent=s;$('scheduler').appendChild(o)});$('scheduler').value='beta';
-  loadAdvanced(d);buildAspects();refresh();dur();hist();
+  loadAdvanced(d);refresh();dur();hist();
   $('engineLink').href=CFG.engine_url;
   const h=await (await fetch('/api/health')).json();
   if(!h.engine){$('warn').style.display='block';$('warn').textContent='Il motore di generazione non risponde. Avvia lo script “start” e riprova.'}

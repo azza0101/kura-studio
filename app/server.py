@@ -20,6 +20,7 @@ import diagnostics
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
+APP_VERSION = (HERE / "VERSION").read_text(encoding="utf-8").strip()
 CFG = json.load(open(ROOT / "config.json", encoding="utf-8-sig")) if (ROOT / "config.json").exists() else {}
 ENGINE = CFG.get("engine_url", "http://127.0.0.1:8188").rstrip("/")
 OUT_DIR = Path(CFG.get("engine_output_dir", ""))
@@ -29,7 +30,7 @@ VIDEO_FORMAT = CFG.get("video_format", "video/nvenc_h264-mp4")   # "video/h264-m
 OBJECT_INFO = {}                                    # cache di /object_info per risolvere i nomi dei modelli
 TEMPLATE = json.load(open(HERE / "workflow_api.json", encoding="utf8"))
 OPTS = json.load(open(HERE / "options.json", encoding="utf8"))
-DEFAULT_FIXED_PROMPT = OPTS["defaults"]["prompt"].split("FORMAT:", 1)[0].strip()
+DEFAULT_FIXED_PROMPT = (HERE / "assets" / "global_kura_style.txt").read_text(encoding="utf-8").strip()
 JOBS = {}      # job_id -> {"prompt_id", "events": [..], "done": bool, "result": {...}}
 REPORTS = {}
 CLIENT_ID = str(uuid.uuid4())
@@ -107,7 +108,11 @@ def build_workflow(p):
     fixed = p.get("fixed_prompt", "")
     if not isinstance(fixed, str):
         raise ValueError("Il prompt fisso deve essere testo")
-    wf["10"]["inputs"]["value"] = fixed.strip() + "\n\n" + text if fixed.strip() else text
+    fixed = fixed.strip()
+    old_block = DEFAULT_FIXED_PROMPT.split("\n\nREGOLA PERMANENTE — EYES", 1)[0]
+    if fixed == DEFAULT_FIXED_PROMPT and old_block in text and fixed not in text:
+        text = text.replace(old_block, fixed, 1)
+    wf["10"]["inputs"]["value"] = fixed + "\n\n" + text if fixed and fixed not in text else text
     wf["73"]["inputs"]["noise_seed"] = seed
     wf["75"]["inputs"]["steps"] = int(p.get("steps", 4))
     # risoluzione e durata calcolate qui: cosi' non servono nodi custom
@@ -177,7 +182,12 @@ def parse_duration(text):
     rx = TEMPLATE["99"]["inputs"]["regex_pattern"]
     m = re.search(rx, text or "", re.I)
     try:
-        return float(m.group(1)) if m else None
+        if m:
+            return float(m.group(1))
+        ends = re.findall(r'-->\s*(\d{1,3}):(\d{2}):(\d{2})[,.](\d{1,3})', text or '')
+        durations = [int(h)*3600 + int(minutes)*60 + int(sec) + int(ms.ljust(3, '0'))/1000
+                     for h, minutes, sec, ms in ends if int(minutes) < 60 and int(sec) < 60]
+        return max(durations) if durations else None
     except Exception:
         return None
 
@@ -241,7 +251,7 @@ async def h_config(request):
     def choices(cls, field, fallback):
         return node_choices(OBJECT_INFO, cls, field) or fallback
     fallback_samplers = OPTS["samplers"] if isinstance(OPTS["samplers"], list) else [OPTS["defaults"]["sampler"]]
-    return web.json_response({"defaults": OPTS["defaults"], "fixed_prompt_original": DEFAULT_FIXED_PROMPT, "aspects": OPTS["aspects"], "samplers": choices("KSamplerSelect", "sampler_name", fallback_samplers),
+    return web.json_response({"version": APP_VERSION, "defaults": OPTS["defaults"], "fixed_prompt_original": DEFAULT_FIXED_PROMPT, "aspects": OPTS["aspects"], "samplers": choices("KSamplerSelect", "sampler_name", fallback_samplers),
                               "schedulers": choices("BasicScheduler", "scheduler", ["beta"]),
                               "duration": parse_duration(OPTS["defaults"]["prompt"]), "engine_url": ENGINE})
 
@@ -485,5 +495,5 @@ app.add_routes([
 ])
 
 if __name__ == "__main__":
-    print(f"Kura Studio su http://127.0.0.1:{PORT}  (motore: {ENGINE})")
+    print(f"Kura Studio {APP_VERSION} su http://127.0.0.1:{PORT}  (motore: {ENGINE})")
     web.run_app(app, host="127.0.0.1", port=PORT, print=None)

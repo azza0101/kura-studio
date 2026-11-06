@@ -1,6 +1,7 @@
 Kura Studio
 ===========
 Versione 2 (ramo v2). La versione precedente rimane sul ramo main.
+Versione visibile: app/VERSION. Incrementare il numero per ogni aggiornamento pubblicato.
 Avvio:      start.bat   (apre l'app su http://127.0.0.1:7860)
 Componenti: python installer\install.py --engine <cartella ComfyUI> [--mirror <cartella>]   (--check per la sola verifica)
 Aggiorna:   dentro l'app, Avanzate > Aggiornamenti > Controlla > Aggiorna ora
@@ -9,5 +10,6 @@ Config:     config.json (non viene mai sovrascritto dagli aggiornamenti)
             update_repo ("utente/nome"), update_branch ("main"), update_token (solo se il repo e' privato)
 
 Durata: normalmente si usa la durata rilevata nel prompt; se non viene rilevata, si usa la durata del workflow. Attiva Durata manuale per scegliere i secondi. I frame vengono arrotondati alla griglia richiesta dal modello.
+Prompt fisso: il blocco GLOBAL KURA e' attivo per impostazione iniziale. In Avanzate si puo' disattivare, sbloccare e modificare o ripristinare. La modifica rimane nel browser usato.
 Galleria: mostra fino a 100 video in output/KuraStudio, privilegiando la versione con audio.
 Aggiornamenti: questa versione usa il ramo v2 del repository ufficiale; main conserva la versione precedente.

@@ -67,7 +67,7 @@
 </head>
 <body>
 <header>
-  <div class="logo"></div><h1>Kura Studio <small style="color:var(--mut);font-weight:400"> / video lab · V2</small></h1><div class="sp"></div>
+  <div class="logo"></div><h1>Kura Studio <small style="color:var(--mut);font-weight:400"> / video lab · <span id="appVersion">V2</span></small></h1><div class="sp"></div>
   <button class="iconbtn" id="openAdv">⚙ Avanzate</button>
 </header>
 
@@ -216,7 +216,11 @@ function loadAdvanced(d){
 }
 async function init(){
   CFG=await (await fetch('/api/config')).json();const d=CFG.defaults;
-  $('fixedPrompt').value=ls('fixedPrompt')??CFG.fixed_prompt_original??'';$('fixedEnabled').checked=!!ls('fixedEnabled');
+  $('appVersion').textContent='v'+(CFG.version||'2');
+  const savedFixed=ls('fixedPrompt'),oldFixed=(d.prompt||'').split('FORMAT:')[0].trim();
+  $('fixedPrompt').value=savedFixed===null||savedFixed===oldFixed?(CFG.fixed_prompt_original||''):savedFixed;
+  if(savedFixed===oldFixed)ls('fixedPrompt',$('fixedPrompt').value);
+  $('fixedEnabled').checked=ls('fixedEnabled')??true;
   $('prompt').value=ls('prompt')??d.prompt;$('steps').value=ls('steps')??d.steps;$('mp').value=ls('mp')??d.megapixels;
   aspect=ls('aspect')||d.aspect;$('seed').value=ls('seed')??'';$('lock').checked=!!ls('lock');
   if(!CFG.aspects.includes(aspect))aspect=d.aspect;

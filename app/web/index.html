@@ -256,6 +256,16 @@ function show(r){
   const p=$('player');p.innerHTML='';const v=document.createElement('video');v.src=url(r);v.controls=true;v.loop=true;v.autoplay=true;v.muted=false;v.playsInline=true;p.appendChild(v);p.style.aspectRatio='';
   $('dl').href=url(r,true);$('dl').setAttribute('download',r.filename);$('opn').href=url(r);$('acts').style.display='flex';$('stTxt').textContent='Pronto';
 }
+$('dl').addEventListener('click',async e=>{
+  if(!window.showSaveFilePicker){toast('Il browser userà la propria cartella di download. Per scegliere ogni volta, attiva nelle impostazioni del browser “Chiedi dove salvare”.');return}
+  e.preventDefault();
+  try{
+    const handle=await window.showSaveFilePicker({suggestedName:$('dl').download,types:[{description:'Video MP4',accept:{'video/mp4':['.mp4']}}]});
+    const response=await fetch($('dl').href);if(!response.ok)throw new Error('Video non disponibile');
+    const file=await handle.createWritable();try{await response.body.pipeTo(file)}catch(err){await file.abort().catch(()=>{});throw err}
+    toast('Video salvato.');
+  }catch(err){if(err.name!=='AbortError')toast('Salvataggio non riuscito: '+err.message)}
+});
 async function hist(){
   try{const j=await (await fetch('/api/history')).json();const h=$('hist');h.innerHTML='';
     j.items.forEach(i=>{const b=document.createElement('button'),v=document.createElement('video'),t=document.createElement('span');v.src=url(i)+'#t=0.1';v.preload='metadata';v.muted=true;v.playsInline=true;t.textContent=new Date(i.mtime*1000).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' · '+i.mb+' MB';b.append(v,t);b.onclick=()=>show(i);h.appendChild(b)});

@@ -32,6 +32,7 @@ OPTS = json.load(open(HERE / "options.json", encoding="utf8"))
 JOBS = {}      # job_id -> {"prompt_id", "events": [..], "done": bool, "result": {...}}
 REPORTS = {}
 CLIENT_ID = str(uuid.uuid4())
+DEFAULT_REFERENCE = None
 
 
 def aspect_size(aspect, mp, swap=False, multiple=32):
@@ -256,11 +257,24 @@ async def h_health(request):
 
 
 async def h_generate(request):
+    global DEFAULT_REFERENCE
     body = await request.json()
     if not OBJECT_INFO:
         await load_object_info()
     wf, seed = build_workflow(body)
     async with aiohttp.ClientSession() as s:
+        if not (body.get("advanced") or {}).get("reference_image") and (HERE / "assets" / "giulia-reference.jpg").is_file():
+            if DEFAULT_REFERENCE is None:
+                image = (HERE / "assets" / "giulia-reference.jpg").read_bytes()
+                form = aiohttp.FormData()
+                form.add_field("image", image, filename="kura-giulia-3c17d521.jpg", content_type="image/jpeg")
+                form.add_field("overwrite", "false")
+                async with s.post(ENGINE + "/upload/image", data=form) as response:
+                    if response.status != 200:
+                        return web.json_response({"error": "Impossibile caricare la reference predefinita nel motore"}, status=502)
+                    info = await response.json()
+                    DEFAULT_REFERENCE = (info.get("subfolder", "") + "/" if info.get("subfolder") else "") + info["name"]
+            wf["7"]["inputs"]["image"] = DEFAULT_REFERENCE
         async with s.post(ENGINE + "/prompt", json={"prompt": wf, "client_id": CLIENT_ID}) as r:
             data = await r.json()
             if r.status != 200 or "prompt_id" not in data:

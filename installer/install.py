@@ -118,14 +118,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--engine", required=True, help="cartella ComfyUI (quella con main.py)")
     ap.add_argument("--mirror", action="append", default=[], help="cartella dove cercare i file senza fonte pubblica (anche rete)")
+    ap.add_argument("--models", help="cartella dei modelli (dove cercare e dove mettere i pesi scaricati); default: <motore>\models")
     ap.add_argument("--python", help="python del motore (default: python_embeded accanto alla cartella)")
     ap.add_argument("--check", action="store_true", help="solo verifica, non scarica")
     a = ap.parse_args()
     eng = Path(a.engine)
     if not (eng / "main.py").exists():
         sys.exit("Non trovo main.py in " + str(eng))
-    models, custom = eng / "models", eng / "custom_nodes"
+    models, custom = (Path(a.models) if a.models else eng / "models"), eng / "custom_nodes"
     roots = model_roots(eng)
+    if models not in roots:
+        roots.insert(0, models)
     emb = eng.parent / "python_embeded" / "python.exe"
     py = a.python or (str(emb) if emb.exists() else sys.executable)
     report = {"nodes": {}, "models": {}}

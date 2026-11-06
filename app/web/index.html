@@ -132,6 +132,13 @@
   <div style="display:flex;align-items:center"><h3>Impostazioni avanzate</h3><div style="flex:1"></div><button class="iconbtn" id="closeAdv">✕</button></div>
   <div class="sub">Di solito non servono: i valori predefiniti sono quelli collaudati.</div>
 
+  <label class="l" for="fixedPrompt">Prompt fisso di stile</label>
+  <div class="dim">Quando attivo, viene aggiunto prima del prompt della scena. Disattivalo se la scena contiene già le proprie regole di stile.</div>
+  <div class="dim"><label><input type="checkbox" id="fixedEnabled"> Usa il prompt fisso</label></div>
+  <textarea id="fixedPrompt" spellcheck="false" readonly aria-label="Prompt fisso di stile" style="min-height:180px;margin-top:8px"></textarea>
+  <div class="dim"><label><input type="checkbox" id="fixedUnlock"> Sblocca modifica</label> · modifiche salvate in questo browser</div>
+  <button class="btn" id="fixedRestore" style="padding:9px 12px;margin-top:8px">Ripristina prompt originale</button>
+  <div class="sep"></div>
   <label class="l">LoRA stile <span class="val" id="styleV"></span></label>
   <input type="range" id="style" min="0" max="1.5" step="0.05">
   <div style="height:14px"></div>
@@ -209,6 +216,7 @@ function loadAdvanced(d){
 }
 async function init(){
   CFG=await (await fetch('/api/config')).json();const d=CFG.defaults;
+  $('fixedPrompt').value=ls('fixedPrompt')??CFG.fixed_prompt_original??'';$('fixedEnabled').checked=!!ls('fixedEnabled');
   $('prompt').value=ls('prompt')??d.prompt;$('steps').value=ls('steps')??d.steps;$('mp').value=ls('mp')??d.megapixels;
   aspect=ls('aspect')||d.aspect;$('seed').value=ls('seed')??'';$('lock').checked=!!ls('lock');
   if(!CFG.aspects.includes(aspect))aspect=d.aspect;
@@ -223,7 +231,7 @@ async function init(){
   else if(h.missing_nodes.length||(h.missing_models||[]).length){$('warn').style.display='block';$('warn').textContent='Componenti mancanti: '+[...h.missing_nodes,...(h.missing_models||[]).map(m=>'peso '+m)].join(', ')}
 }
 function payload(){
-  return{prompt:$('prompt').value,seed:$('lock').checked&&$('seed').value!==''?+$('seed').value:-1,steps:+$('steps').value,aspect,megapixels:+$('mp').value,seconds:$('manualDuration').checked?+$('seconds').value:null,
+  return{prompt:$('prompt').value,fixed_prompt:$('fixedEnabled').checked?$('fixedPrompt').value:'',seed:$('lock').checked&&$('seed').value!==''?+$('seed').value:-1,steps:+$('steps').value,aspect,megapixels:+$('mp').value,seconds:$('manualDuration').checked?+$('seconds').value:null,
     advanced:{style_lora:+$('style').value,tao_lora:+$('tao').value,shift_video:+$('shv').value,shift_audio:+$('sha').value,keep_percent:+$('keep').value,sampler:$('sampler').value,scheduler:$('scheduler').value,denoise:+$('denoise').value,start_percent:+$('attStart').value,end_percent:+$('attEnd').value,min_tokens:+$('minTokens').value,extra_tokens:+$('extraTokens').value,frame_rate:+$('fps').value,loop_count:+$('loops').value,bitrate:+$('bitrate').value,crf:+$('crf').value,...(ref?{reference_image:ref}:{})}};
 }
 function setRunning(on){
@@ -278,6 +286,10 @@ async function hist(){
 $('go').onclick=go;$('dice').onclick=()=>{$('seed').value='';$('lock').checked=false;ls('lock',false)};
 ['steps','mp','style','tao','seconds'].forEach(i=>$(i).addEventListener('input',refresh));
 $('manualDuration').onchange=()=>{$('seconds').disabled=!$('manualDuration').checked;refresh()};
+$('fixedUnlock').onchange=()=>{$('fixedPrompt').readOnly=!$('fixedUnlock').checked};
+$('fixedPrompt').addEventListener('input',()=>ls('fixedPrompt',$('fixedPrompt').value));
+$('fixedEnabled').onchange=()=>ls('fixedEnabled',$('fixedEnabled').checked);
+$('fixedRestore').onclick=()=>{$('fixedPrompt').value=CFG.fixed_prompt_original;ls('fixedPrompt',$('fixedPrompt').value);$('fixedUnlock').checked=false;$('fixedPrompt').readOnly=true;toast('Prompt fisso originale ripristinato.')};
 let dt;$('prompt').addEventListener('input',()=>{clearTimeout(dt);dt=setTimeout(dur,400)});
 $('openAdv').onclick=()=>$('drawer').classList.add('open');$('closeAdv').onclick=()=>$('drawer').classList.remove('open');
 async function updCheck(){

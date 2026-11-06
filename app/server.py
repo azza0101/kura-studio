@@ -29,6 +29,7 @@ VIDEO_FORMAT = CFG.get("video_format", "video/nvenc_h264-mp4")   # "video/h264-m
 OBJECT_INFO = {}                                    # cache di /object_info per risolvere i nomi dei modelli
 TEMPLATE = json.load(open(HERE / "workflow_api.json", encoding="utf8"))
 OPTS = json.load(open(HERE / "options.json", encoding="utf8"))
+DEFAULT_FIXED_PROMPT = OPTS["defaults"]["prompt"].split("FORMAT:", 1)[0].strip()
 JOBS = {}      # job_id -> {"prompt_id", "events": [..], "done": bool, "result": {...}}
 REPORTS = {}
 CLIENT_ID = str(uuid.uuid4())
@@ -103,7 +104,10 @@ def build_workflow(p):
     if seed < 0:
         seed = random.randint(0, 2**48)
     text = p.get("prompt") or wf["10"]["inputs"]["value"]
-    wf["10"]["inputs"]["value"] = text
+    fixed = p.get("fixed_prompt", "")
+    if not isinstance(fixed, str):
+        raise ValueError("Il prompt fisso deve essere testo")
+    wf["10"]["inputs"]["value"] = fixed.strip() + "\n\n" + text if fixed.strip() else text
     wf["73"]["inputs"]["noise_seed"] = seed
     wf["75"]["inputs"]["steps"] = int(p.get("steps", 4))
     # risoluzione e durata calcolate qui: cosi' non servono nodi custom
@@ -237,7 +241,7 @@ async def h_config(request):
     def choices(cls, field, fallback):
         return node_choices(OBJECT_INFO, cls, field) or fallback
     fallback_samplers = OPTS["samplers"] if isinstance(OPTS["samplers"], list) else [OPTS["defaults"]["sampler"]]
-    return web.json_response({"defaults": OPTS["defaults"], "aspects": OPTS["aspects"], "samplers": choices("KSamplerSelect", "sampler_name", fallback_samplers),
+    return web.json_response({"defaults": OPTS["defaults"], "fixed_prompt_original": DEFAULT_FIXED_PROMPT, "aspects": OPTS["aspects"], "samplers": choices("KSamplerSelect", "sampler_name", fallback_samplers),
                               "schedulers": choices("BasicScheduler", "scheduler", ["beta"]),
                               "duration": parse_duration(OPTS["defaults"]["prompt"]), "engine_url": ENGINE})
 

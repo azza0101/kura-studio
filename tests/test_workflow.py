@@ -7,6 +7,15 @@ import server
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_fixed_prompt_is_prepended_and_scene_duration_is_used(self):
+        scene = '[reference generation] An 8.00-second sequence.'
+        wf, _ = server.build_workflow({'prompt': scene, 'fixed_prompt': 'STYLE RULES'})
+        self.assertEqual(wf['10']['inputs']['value'], 'STYLE RULES\n\n' + scene)
+        self.assertEqual(wf['70']['inputs']['length'], 192)
+
+    def test_existing_prompt_without_fixed_prompt_is_unchanged(self):
+        wf, _ = server.build_workflow({'prompt': 'my existing full prompt'})
+        self.assertEqual(wf['10']['inputs']['value'], 'my existing full prompt')
     def test_advanced_parameters_and_duration(self):
         workflow, seed = server.build_workflow({
             'prompt': 'test', 'seed': 42, 'seconds': 3,

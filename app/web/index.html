@@ -48,8 +48,9 @@
   .actions{display:flex;gap:10px}
   .actions a{flex:1;text-align:center;text-decoration:none;color:#fff;background:linear-gradient(135deg,#7c5cff,#3da5f5);padding:12px;border-radius:12px;font-weight:600}
   .actions a.sec{background:var(--panel2);border:1px solid var(--line);color:var(--text)}
-  .hist{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
-  .hist button{flex:none;width:92px;height:128px;border-radius:10px;border:1px solid var(--line);background:#0a0b10;color:var(--mut);cursor:pointer;font-size:11px;padding:6px;text-align:center}
+  .hist{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;max-height:400px;overflow:auto;padding-bottom:4px}
+  .hist button{min-width:0;border-radius:10px;border:1px solid var(--line);background:#0a0b10;color:var(--mut);cursor:pointer;font-size:11px;padding:6px;text-align:left}
+  .hist button video{display:block;width:100%;aspect-ratio:9/12;object-fit:cover;background:#151820;border-radius:6px;margin-bottom:6px}
   .hist button:hover{border-color:var(--acc)}
   .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#2a1a1f;border:1px solid #5b2a33;color:#ffb4b4;padding:10px 16px;border-radius:10px;display:none;z-index:50;max-width:80vw}
   /* pannello avanzate */
@@ -66,16 +67,18 @@
 </head>
 <body>
 <header>
-  <div class="logo"></div><h1>Kura Studio</h1><div class="sp"></div>
+  <div class="logo"></div><h1>Kura Studio <small style="color:var(--mut);font-weight:400"> / video lab · V2</small></h1><div class="sp"></div>
   <button class="iconbtn" id="openAdv">⚙ Avanzate</button>
 </header>
 
 <main>
   <section class="card">
     <div class="warn" id="warn"></div>
+    <div style="font-size:24px;font-weight:700;margin-bottom:4px">Crea un video</div><div class="dim" style="margin-bottom:20px">Racconta la scena, scegli il formato e avvia la generazione.</div>
     <label class="l" for="prompt">Prompt</label>
     <textarea id="prompt" spellcheck="false" placeholder="Descrivi la scena…"></textarea>
     <div class="dim" id="dur"></div>
+    <div class="row two"><div><label class="l" for="ref">Immagine di riferimento</label><input type="file" id="ref" accept="image/*"><div class="dim" id="refName"></div></div><div><label class="l" for="seconds">Durata in secondi</label><input type="number" id="seconds" min="0.25" max="30" step="0.1" placeholder="Automatica dal prompt" disabled><div class="dim"><label><input type="checkbox" id="manualDuration"> Durata manuale</label></div><div class="dim" id="durationActual">Automatica dal prompt</div></div></div>
 
     <div class="row two">
       <div>
@@ -119,7 +122,7 @@
       <a class="sec" id="opn" href="#" target="_blank">Apri</a>
     </div>
     <div>
-      <label class="l">Recenti</label>
+      <label class="l">Galleria · video recenti</label>
       <div class="hist" id="hist"></div>
     </div>
   </section>
@@ -129,11 +132,6 @@
   <div style="display:flex;align-items:center"><h3>Impostazioni avanzate</h3><div style="flex:1"></div><button class="iconbtn" id="closeAdv">✕</button></div>
   <div class="sub">Di solito non servono: i valori predefiniti sono quelli collaudati.</div>
 
-  <label class="l">Immagine di riferimento</label>
-  <input type="file" id="ref" accept="image/*">
-  <div class="dim" id="refName"></div>
-
-  <div class="sep"></div>
   <label class="l">LoRA stile <span class="val" id="styleV"></span></label>
   <input type="range" id="style" min="0" max="1.5" step="0.05">
   <div style="height:14px"></div>
@@ -149,6 +147,12 @@
     <div><label class="l">Attenzione sparsa %</label><input type="number" id="keep" step="1" min="1" max="100"></div>
     <div><label class="l">Sampler</label><select id="sampler"></select></div>
   </div>
+  <div class="row two"><div><label class="l">Scheduler</label><select id="scheduler"></select></div><div><label class="l">Denoise</label><input type="number" id="denoise" min="0" max="1" step="0.05" value="1"></div></div>
+  <div class="row two"><div><label class="l">Attenzione · inizio</label><input type="number" id="attStart" min="0" max="1" step="0.05" value="0"></div><div><label class="l">Attenzione · fine</label><input type="number" id="attEnd" min="0" max="1" step="0.05" value="1"></div></div>
+  <div class="row two"><div><label class="l">Token minimi</label><input type="number" id="minTokens" min="0" step="1" value="12288"></div><div><label class="l">Token extra</label><input type="number" id="extraTokens" min="0" step="1" value="256"></div></div>
+  <div class="sep"></div><label class="l">Esportazione video</label><div class="dim">Il workflow genera a 24 fps; modificare gli fps di esportazione cambia la velocità di riproduzione.</div>
+  <div class="row two"><div><label class="l">FPS esportazione</label><input type="number" id="fps" min="1" max="60" value="24"></div><div><label class="l">Ripetizioni</label><input type="number" id="loops" min="0" max="100" value="0"></div></div>
+  <div class="row two"><div><label class="l">Bitrate NVENC · Mbps</label><input type="number" id="bitrate" min="1" max="100" value="10"></div><div><label class="l">Qualità CPU · CRF</label><input type="number" id="crf" min="0" max="51" value="19"></div></div>
 
   <div class="sep"></div>
   <button class="btn" id="reset" style="padding:10px 14px">Ripristina predefiniti</button>
@@ -177,7 +181,8 @@ function sizeOf(){
 }
 function refresh(){
   $('stepsV').textContent=$('steps').value;$('mpV').textContent=(+$('mp').value).toFixed(2)+' MP';
-  const [w,h]=sizeOf();$('size').textContent=`${w} × ${h} px`;
+  const [w,h]=sizeOf();$('size').textContent=`${w} × ${h} px · ${(w*h/1000000).toFixed(3)} MP effettivi`;
+  const sec=$('manualDuration').checked?+$('seconds').value:0;if(sec>0){const frames=Math.ceil((sec*24-5)/17-0.02)*17+5;$('durationActual').textContent=`${frames} frame · ${(frames/24).toFixed(2)} s a 24 fps`}else $('durationActual').textContent=$('manualDuration').checked?'Inserisci la durata desiderata':'Automatica dal prompt';
   $('styleV').textContent=(+$('style').value).toFixed(2);$('taoV').textContent=(+$('tao').value).toFixed(2);
   const p=$('player');if(!p.querySelector('video')){p.style.aspectRatio=w+' / '+h}
 }
@@ -187,7 +192,7 @@ function buildAspects(){
 }
 async function dur(){
   try{const r=await fetch('/api/duration',{method:'POST',body:JSON.stringify({prompt:$('prompt').value})});const j=await r.json();
-  $('dur').textContent=j.seconds?`Durata rilevata dal testo: ${j.seconds} s`:'Durata: non indicata nel testo (verrà usata quella predefinita)'}catch{}
+  $('dur').textContent=j.seconds?`Durata rilevata dal testo: ${j.seconds} s`:'Nessuna durata rilevata nel testo; se il campo durata è vuoto si usa quella predefinita.'}catch{}
 }
 function loadAdvanced(d){
   $('style').value=d.style_lora;$('tao').value=d.tao_lora;$('shv').value=d.shift_video;$('sha').value=d.shift_audio;$('keep').value=d.keep_percent;
@@ -198,6 +203,7 @@ async function init(){
   $('prompt').value=ls('prompt')??d.prompt;$('steps').value=ls('steps')??d.steps;$('mp').value=ls('mp')??d.megapixels;
   aspect=ls('aspect')||d.aspect;$('seed').value=ls('seed')??'';$('lock').checked=!!ls('lock');
   CFG.samplers.forEach(s=>{const o=document.createElement('option');o.value=o.textContent=s;$('sampler').appendChild(o)});
+  (CFG.schedulers||['beta']).forEach(s=>{const o=document.createElement('option');o.value=o.textContent=s;$('scheduler').appendChild(o)});$('scheduler').value='beta';
   loadAdvanced(d);buildAspects();refresh();dur();hist();
   $('engineLink').href=CFG.engine_url;
   const h=await (await fetch('/api/health')).json();
@@ -205,14 +211,15 @@ async function init(){
   else if(h.missing_nodes.length||(h.missing_models||[]).length){$('warn').style.display='block';$('warn').textContent='Componenti mancanti: '+[...h.missing_nodes,...(h.missing_models||[]).map(m=>'peso '+m)].join(', ')}
 }
 function payload(){
-  return{prompt:$('prompt').value,seed:$('lock').checked&&$('seed').value!==''?+$('seed').value:-1,steps:+$('steps').value,aspect,megapixels:+$('mp').value,
-    advanced:{style_lora:+$('style').value,tao_lora:+$('tao').value,shift_video:+$('shv').value,shift_audio:+$('sha').value,keep_percent:+$('keep').value,sampler:$('sampler').value,...(ref?{reference_image:ref}:{})}};
+  return{prompt:$('prompt').value,seed:$('lock').checked&&$('seed').value!==''?+$('seed').value:-1,steps:+$('steps').value,aspect,megapixels:+$('mp').value,seconds:$('manualDuration').checked?+$('seconds').value:null,
+    advanced:{style_lora:+$('style').value,tao_lora:+$('tao').value,shift_video:+$('shv').value,shift_audio:+$('sha').value,keep_percent:+$('keep').value,sampler:$('sampler').value,scheduler:$('scheduler').value,denoise:+$('denoise').value,start_percent:+$('attStart').value,end_percent:+$('attEnd').value,min_tokens:+$('minTokens').value,extra_tokens:+$('extraTokens').value,frame_rate:+$('fps').value,loop_count:+$('loops').value,bitrate:+$('bitrate').value,crf:+$('crf').value,...(ref?{reference_image:ref}:{})}};
 }
 function setRunning(on){
   running=on;const g=$('go');g.textContent=on?'Annulla':'Genera video';g.classList.toggle('stop',on);$('prog').style.display=on||job?'block':'none';
 }
 async function go(){
-  if(running){await fetch('/api/cancel',{method:'POST'});return}
+  if(running){const r=await fetch('/api/cancel',{method:'POST',body:JSON.stringify({job})});if(!r.ok)toast('Impossibile arrestare: '+(await r.text()));else $('stTxt').textContent='Arresto in corso…';return}
+  if($('manualDuration').checked&&(!$('seconds').validity.valid||!+$('seconds').value)){toast('Inserisci una durata manuale valida.');return}
   const p=payload();ls('prompt',p.prompt);ls('steps',p.steps);ls('mp',p.megapixels);ls('lock',$('lock').checked);if($('seed').value!=='')ls('seed',+$('seed').value);
   $('acts').style.display='none';$('barI').style.width='0';$('stTxt').textContent='Preparazione…';$('stTime').textContent='';
   const r=await fetch('/api/generate',{method:'POST',body:JSON.stringify(p)});const j=await r.json();
@@ -242,11 +249,12 @@ function show(r){
 }
 async function hist(){
   try{const j=await (await fetch('/api/history')).json();const h=$('hist');h.innerHTML='';
-    j.items.forEach(i=>{const b=document.createElement('button');b.textContent=new Date(i.mtime*1000).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' · '+i.mb+' MB';b.onclick=()=>show(i);h.appendChild(b)});
+    j.items.forEach(i=>{const b=document.createElement('button'),v=document.createElement('video'),t=document.createElement('span');v.src=url(i)+'#t=0.1';v.preload='metadata';v.muted=true;v.playsInline=true;t.textContent=new Date(i.mtime*1000).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})+' · '+i.mb+' MB';b.append(v,t);b.onclick=()=>show(i);h.appendChild(b)});
     if(!j.items.length)h.innerHTML='<span class="dim">Nessun video ancora</span>'}catch{}
 }
 $('go').onclick=go;$('dice').onclick=()=>{$('seed').value='';$('lock').checked=false;ls('lock',false)};
-['steps','mp','style','tao'].forEach(i=>$(i).addEventListener('input',refresh));
+['steps','mp','style','tao','seconds'].forEach(i=>$(i).addEventListener('input',refresh));
+$('manualDuration').onchange=()=>{$('seconds').disabled=!$('manualDuration').checked;refresh()};
 let dt;$('prompt').addEventListener('input',()=>{clearTimeout(dt);dt=setTimeout(dur,400)});
 $('openAdv').onclick=()=>$('drawer').classList.add('open');$('closeAdv').onclick=()=>$('drawer').classList.remove('open');
 async function updCheck(){
@@ -255,10 +263,8 @@ async function updCheck(){
     const cur=c.sha?`Versione ${c.sha.slice(0,7)} · ${c.date||''}`:'Versione non registrata';
     if(!j.configured){$('verTxt').textContent=cur+' · aggiornamenti non configurati';return}
     if(j.error){$('verTxt').textContent=cur+' · impossibile controllare: '+j.error;return}
-    if(j.behind>0){$('verTxt').textContent=cur+` · disponibili ${j.behind} aggiornament${j.behind>1?'i':'o'}`;$('updList').textContent=(j.changes||[]).map(x=>'• '+x).join('
-');$('updGo').style.display='inline-block';
-      if(j.dirty){$('updList').textContent+='
-(attenzione: file modificati in locale)'}}
+    if(j.behind>0){$('verTxt').textContent=cur+` · disponibili ${j.behind} aggiornament${j.behind>1?'i':'o'}`;$('updList').textContent=(j.changes||[]).map(x=>'• '+x).join('\n');$('updGo').style.display='inline-block';
+      if(j.dirty){$('updList').textContent+='\n(attenzione: file modificati in locale)'}}
     else $('verTxt').textContent=cur+' · aggiornata'}catch(e){$('verTxt').textContent='Controllo non riuscito'}
 }
 $('updCheck').onclick=updCheck;
@@ -270,7 +276,7 @@ $('updGo').onclick=async()=>{
   const t=setInterval(async()=>{try{const h=await fetch('/api/health');if(h.ok){clearInterval(t);location.reload()}}catch{}},1200);
 };
 $('openAdv').addEventListener('click',updCheck);
-$('reset').onclick=()=>loadAdvanced(CFG.defaults);
+$('reset').onclick=()=>{loadAdvanced(CFG.defaults);$('scheduler').value='beta';$('denoise').value=1;$('attStart').value=0;$('attEnd').value=1;$('minTokens').value=12288;$('extraTokens').value=256;$('fps').value=24;$('loops').value=0;$('bitrate').value=10;$('crf').value=19;refresh()};
 $('ref').onchange=async e=>{const f=e.target.files[0];if(!f)return;const fd=new FormData();fd.append('image',f);
   const r=await fetch('/api/upload',{method:'POST',body:fd});const j=await r.json();ref=j.name;$('refName').textContent='Caricata: '+f.name};
 init();

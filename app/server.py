@@ -58,6 +58,18 @@ def pick(options, wanted):
     return wanted
 
 
+def node_choices(info, cls, field):
+    try:
+        spec = info[cls]["input"]["required"][field]
+        if isinstance(spec[0], list):
+            return spec[0]
+        if len(spec) > 1 and isinstance(spec[1], dict):
+            return spec[1].get("options", [])
+    except (KeyError, IndexError, TypeError):
+        pass
+    return []
+
+
 def build_workflow(p):
     wf = json.loads(json.dumps(TEMPLATE))
     seed = int(p.get("seed", -1))
@@ -70,12 +82,23 @@ def build_workflow(p):
     # risoluzione e durata calcolate qui: cosi' non servono nodi custom
     r = wf["14"]["inputs"]
     W, H = aspect_size(p.get("aspect", r["aspect_ratio"]), float(p.get("megapixels", r["megapixels"])), bool(p.get("swap", False)))
-    secs = parse_duration(text)
+    secs = p.get("seconds") or parse_duration(text)
     length = frames_for(secs) if secs else 124
     wf["70"]["inputs"]["width"], wf["70"]["inputs"]["height"], wf["70"]["inputs"]["length"] = W, H, length
     for nid in ("14", "30", "99"):
         wf.pop(nid, None)
     adv = p.get("advanced") or {}
+    for key in ("denoise",):
+        if key in adv:
+            wf["75"]["inputs"][key] = float(adv[key])
+    if "scheduler" in adv:
+        wf["75"]["inputs"]["scheduler"] = adv["scheduler"]
+    for key in ("start_percent", "end_percent"):
+        if key in adv:
+            wf["69"]["inputs"][key] = float(adv[key])
+    for key in ("min_tokens", "extra_tokens"):
+        if key in adv:
+            wf["69"]["inputs"][key] = int(adv[key])
     if "style_lora" in adv:
         wf["96"]["inputs"]["strength_model"] = float(adv["style_lora"])
     if "tao_lora" in adv:
@@ -97,18 +120,21 @@ def build_workflow(p):
     # formato del video
     f = wf["79"]["inputs"]
     f["format"] = VIDEO_FORMAT
+    if "frame_rate" in adv:
+        f["frame_rate"] = int(adv["frame_rate"])
+    if "loop_count" in adv:
+        f["loop_count"] = int(adv["loop_count"])
+    if "bitrate" in adv:
+        f["bitrate"] = int(adv["bitrate"])
     if VIDEO_FORMAT == "video/h264-mp4":
         for k in ("bitrate", "megabit"):
             f.pop(k, None)
-        f["crf"] = 19
+        f["crf"] = int(adv.get("crf", 19))
     f["filename_prefix"] = "KuraStudio/video"
     # nomi dei modelli come li vede il motore
     oi = OBJECT_INFO
     def opts(cls, field):
-        try:
-            return oi[cls]["input"]["required"][field][0]
-        except Exception:
-            return None
+        return node_choices(oi, cls, field)
     for nid, cls, field in (("66", "UNETLoader", "unet_name"), ("2", "CLIPLoader", "clip_name"), ("1", "VAELoader", "vae_name"),
                             ("9", "VAELoader", "vae_name"), ("96", "LoraLoaderModelOnly", "lora_name"), ("97", "LoraLoaderModelOnly", "lora_name")):
         if nid in wf and opts(cls, field):
@@ -176,7 +202,13 @@ async def h_index(request):
 
 
 async def h_config(request):
-    return web.json_response({"defaults": OPTS["defaults"], "aspects": OPTS["aspects"], "samplers": OPTS["samplers"],
+    if not OBJECT_INFO:
+        await load_object_info()
+    def choices(cls, field, fallback):
+        return node_choices(OBJECT_INFO, cls, field) or fallback
+    fallback_samplers = OPTS["samplers"] if isinstance(OPTS["samplers"], list) else [OPTS["defaults"]["sampler"]]
+    return web.json_response({"defaults": OPTS["defaults"], "aspects": OPTS["aspects"], "samplers": choices("KSamplerSelect", "sampler_name", fallback_samplers),
+                              "schedulers": choices("BasicScheduler", "scheduler", ["beta"]),
                               "duration": parse_duration(OPTS["defaults"]["prompt"]), "engine_url": ENGINE})
 
 
@@ -209,7 +241,7 @@ async def h_health(request):
             man = json.load(open(ROOT / "installer" / "manifest.json", encoding="utf8"))
             have = set()
             for cls, fld in (("UNETLoader", "unet_name"), ("CLIPLoader", "clip_name"), ("VAELoader", "vae_name"), ("LoraLoaderModelOnly", "lora_name")):
-                for o in oi.get(cls, {}).get("input", {}).get("required", {}).get(fld, [[]])[0]:
+                for o in node_choices(oi, cls, fld):
                     have.add(str(o).replace("\\", "/").split("/")[-1].lower())
             out["missing_models"] = [m["id"] for m in man["models"] if m["dest"].split("/")[-1].lower() not in have]
         except Exception:
@@ -232,7 +264,32 @@ async def h_generate(request):
     job_id = uuid.uuid4().hex[:10]
     JOBS[job_id] = {"prompt_id": data["prompt_id"], "events": [], "done": False, "result": None, "seed": seed}
     asyncio.create_task(watch(job_id, data["prompt_id"]))
+    asyncio.create_task(watch_history(job_id, data["prompt_id"]))
     return web.json_response({"job": job_id, "seed": seed})
+
+
+async def watch_history(job_id, prompt_id):
+    """Recupera l'esito anche se un evento websocket arriva prima della connessione."""
+    job = JOBS[job_id]
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as s:
+        while not job["done"]:
+            try:
+                async with s.get(f"{ENGINE}/history/{prompt_id}") as response:
+                    history = (await response.json()).get(prompt_id)
+                if history and history.get("status", {}).get("completed"):
+                    for output in history.get("outputs", {}).values():
+                        if output.get("gifs"):
+                            g = output["gifs"][-1]
+                            job["result"] = {"filename": g["filename"], "subfolder": g.get("subfolder", ""), "type": g.get("type", "output")}
+                    job["done"] = True
+                    return
+                if history and history.get("status", {}).get("status_str") == "error":
+                    job["events"].append({"k": "error", "msg": "Il motore ha segnalato un errore; controlla il log di ComfyUI."})
+                    job["done"] = True
+                    return
+            except (aiohttp.ClientError, asyncio.TimeoutError):
+                pass
+            await asyncio.sleep(2)
 
 
 async def h_events(request):
@@ -244,14 +301,34 @@ async def h_events(request):
 
 
 async def h_cancel(request):
+    body = await request.json()
+    job = JOBS.get(body.get("job"))
+    if not job or job["done"]:
+        return web.json_response({"error": "Generazione non attiva"}, status=404)
     async with aiohttp.ClientSession() as s:
-        await s.post(ENGINE + "/interrupt")
+        async with s.get(ENGINE + "/queue") as r:
+            queue = await r.json()
+        prompt_id = job["prompt_id"]
+        pending = any(len(item) > 1 and item[1] == prompt_id for item in queue.get("queue_pending", []))
+        running = any(len(item) > 1 and item[1] == prompt_id for item in queue.get("queue_running", []))
+        if pending:
+            async with s.post(ENGINE + "/queue", json={"delete": [prompt_id]}) as r:
+                if r.status >= 400:
+                    raise web.HTTPBadGateway(text="Impossibile rimuovere il lavoro dalla coda")
+            job["events"].append({"k": "error", "msg": "Generazione annullata in coda"})
+            job["done"] = True
+        elif running:
+            async with s.post(ENGINE + "/interrupt", json={"prompt_id": prompt_id}) as r:
+                if r.status >= 400:
+                    raise web.HTTPBadGateway(text="Impossibile arrestare la generazione")
+        else:
+            return web.json_response({"error": "Il lavoro non è più in coda"}, status=409)
     return web.json_response({"ok": True})
 
 
 async def h_video(request):
     fn, sub = request.query["filename"], request.query.get("subfolder", "")
-    if ".." in fn or ".." in sub:
+    if ".." in fn or ".." in sub or Path(fn).name != fn or Path(sub).is_absolute():
         raise web.HTTPBadRequest()
     p = OUT_DIR / sub / fn
     if not p.is_file():
@@ -269,7 +346,7 @@ async def h_upload(request):
     data = await f.read()
     form = aiohttp.FormData()
     form.add_field("image", data, filename=f.filename, content_type=f.headers.get("Content-Type", "image/png"))
-    form.add_field("overwrite", "true")
+    form.add_field("overwrite", "false")
     async with aiohttp.ClientSession() as s:
         async with s.post(ENGINE + "/upload/image", data=form) as r:
             j = await r.json()
@@ -280,9 +357,12 @@ async def h_history(request):
     items = []
     d = OUT_DIR / "KuraStudio"
     if d.is_dir():
-        for p in sorted(d.glob("*.mp4"), key=lambda x: x.stat().st_mtime, reverse=True)[:24]:
-            if p.name.endswith("-audio.mp4") or "-audio" not in p.name:
-                items.append({"filename": p.name, "subfolder": "KuraStudio", "mtime": int(p.stat().st_mtime), "mb": round(p.stat().st_size / 1e6, 1)})
+        for p in sorted(d.glob("*.mp4"), key=lambda x: x.stat().st_mtime, reverse=True):
+            if not p.name.endswith("-audio.mp4") and p.with_name(p.stem + "-audio.mp4").exists():
+                continue
+            items.append({"filename": p.name, "subfolder": "KuraStudio", "mtime": int(p.stat().st_mtime), "mb": round(p.stat().st_size / 1e6, 1)})
+            if len(items) >= 100:
+                break
     return web.json_response({"items": items})
 
 

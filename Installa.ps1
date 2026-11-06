@@ -86,7 +86,7 @@ if (-not $cfg.port) { Imposta "port" 7860 }
 Imposta "decoder" $(if ($trt) { "trt" } else { "standard" })
 if (-not $cfg.video_format) { Imposta "video_format" "video/h264-mp4" }
 if (-not $cfg.update_repo) { Imposta "update_repo" "azza0101/kura-studio" }
-if (-not $cfg.update_branch) { Imposta "update_branch" "main" }
+if (-not $cfg.update_branch -or $cfg.update_branch -eq "main") { Imposta "update_branch" "v2" }
 ($cfg | ConvertTo-Json) | Set-Content -Path $ConfigOut -Encoding UTF8
 Write-Host "`nConfigurazione salvata: $ConfigOut" -ForegroundColor Green
 if ($esito -ne 0) { Write-Host "ATTENZIONE: qualche peso manca ancora (vedi sopra). L'app parte lo stesso e segnala cosa manca." -ForegroundColor Yellow }

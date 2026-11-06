@@ -22,7 +22,11 @@ NOWIN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 def _cfg():
     p = ROOT / "config.json"
-    return json.load(open(p, encoding="utf-8-sig")) if p.exists() else {}
+    cfg = json.load(open(p, encoding="utf-8-sig")) if p.exists() else {}
+    # La V2 vive su un ramo separato: non aggiornare accidentalmente alla V1.
+    if cfg.get("update_repo", "").lower() == "azza0101/kura-studio" and cfg.get("update_branch", "main") == "main":
+        cfg["update_branch"] = "v2"
+    return cfg
 
 
 def _git(*args, check=True):

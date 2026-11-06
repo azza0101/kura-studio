@@ -22,7 +22,7 @@ rem --- motore sullo sfondo: se non risponde lo avvia (nascosto)
 powershell -NoProfile -Command "try{(Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8188/system_stats -TimeoutSec 2)|Out-Null;exit 0}catch{exit 1}"
 if errorlevel 1 (
   echo Avvio del motore...
-  start "" /min cmd /c "cd /d %PARENT% && "%PY%" -s ComfyUI\main.py --windows-standalone-build --listen 127.0.0.1 --port 8188 --disable-auto-launch"
+  start "" /min cmd /c ""%PY%" -s "%ENGINE_DIR%\main.py" --listen 127.0.0.1 --port 8188 --disable-auto-launch"
   :wait
   timeout /t 3 /nobreak >nul
   powershell -NoProfile -Command "try{(Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8188/system_stats -TimeoutSec 2)|Out-Null;exit 0}catch{exit 1}"
